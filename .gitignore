@@ -25,6 +25,8 @@ venv/
 env/
 ENV/
 .venv
+venv311/
+venv*/
 
 # Environment Variables
 .env
