@@ -48,6 +48,10 @@ logs/
 .DS_Store
 Thumbs.db
 
+# Local binaries / archives
+cloudflared*
+*.tgz
+
 # Testing
 .pytest_cache/
 .coverage
