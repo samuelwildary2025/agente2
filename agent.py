@@ -1,4 +1,5 @@
 """
+agent atualizado
 Agente de IA para Atendimento de Supermercado
 Utiliza LangChain para orquestração de ferramentas e memória de conversação
 """
