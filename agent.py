@@ -216,8 +216,17 @@ def create_agent() -> AgentExecutor:
     else:
         llm_kwargs["temperature"] = settings.llm_temperature
 
+    # Remover import do cliente OpenAI
+    // ... existing code ...
+    # Remover qualquer instância de OpenAI
+    llm_kwargs = {
+        "model": settings.llm_model,
+        "openai_api_key": settings.openai_api_key,
+        "streaming": False,
+        "temperature": settings.llm_temperature,
+    }
     llm = ChatOpenAI(**llm_kwargs)
-    logger.info(f"LLM configurado (padrão): {settings.llm_model}")
+    logger.info(f"LLM configurado: {settings.llm_model}")
     
     # ==================================================================
     # FIM DA CORREÇÃO (v7)
