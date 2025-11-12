@@ -13,8 +13,8 @@ fi
 echo "[1/6] Derrubando serviços..."
 $COMPOSE_CMD down || true
 
-echo "[2/6] Rebuild sem cache..."
-$COMPOSE_CMD build --no-cache
+echo "[2/6] Rebuild sem cache com cache-buster..."
+$COMPOSE_CMD build --no-cache --pull --build-arg BUILDTIME="$(date +%s)"
 
 echo "[3/6] Subindo serviços..."
 $COMPOSE_CMD up -d --force-recreate

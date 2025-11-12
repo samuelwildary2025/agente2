@@ -14,6 +14,9 @@ ENV PYTHONUNBUFFERED=1 \
 # Diretório de trabalho
 WORKDIR /app
 
+# Cache-buster para build (permite invalidar camadas controladamente)
+ARG BUILDTIME=dev
+
 # Instalar dependências do sistema
 RUN apt-get update && apt-get install -y \
     gcc \
@@ -22,10 +25,13 @@ RUN apt-get update && apt-get install -y \
 
 # Copiar requirements e instalar dependências Python
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN echo "[Build] BUILDTIME=${BUILDTIME}" && pip install --no-cache-dir -r requirements.txt
 
 # Copiar código da aplicação
 COPY . .
+
+# Anotar tempo de build na imagem
+LABEL build_time=${BUILDTIME}
 
 # Criar diretório de logs
 RUN mkdir -p logs
