@@ -5,6 +5,7 @@ Utiliza LangChain para orquestração de ferramentas e memória de conversação
 from typing import Dict, Any
 import os
 from langchain_openai import ChatOpenAI
+from openai import OpenAI
 from langchain_core.messages import AIMessageChunk
 from langchain.agents import AgentExecutor, initialize_agent, AgentType
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -266,6 +267,13 @@ def create_agent() -> AgentExecutor:
                 # Em caso de erro, propaga como chunk único com conteúdo vazio
                 yield AIMessageChunk(content=f"Erro: {str(e)}")
 
+    # Injetar cliente OpenAI explícito para evitar construção interna com 'proxies'
+    try:
+        explicit_client = OpenAI(api_key=settings.openai_api_key)
+        llm_kwargs["client"] = explicit_client
+    except Exception as e:
+        logger.warning(f"Falha ao criar cliente OpenAI explícito: {e}. Prosseguindo sem 'client'.")
+
     llm = NonStreamingChatOpenAI(**llm_kwargs)
     logger.info(f"LLM configurado: {settings.llm_model}")
     
@@ -290,7 +298,10 @@ def create_agent() -> AgentExecutor:
         max_execution_time=60,
         handle_parsing_errors=True,
         agent_kwargs={
-            "system_message": system_prompt_text
+            "system_message": {
+                "type": "system",
+                "content": system_prompt_text,
+            }
         },
     )
     
