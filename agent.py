@@ -7,7 +7,7 @@ import os  # Correção para 'proxies'
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 import httpx
-from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import AIMessageChunk, SystemMessage  # <-- CORREÇÃO: Importar SystemMessage
 from langchain.agents import AgentExecutor, initialize_agent, AgentType
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool
@@ -263,8 +263,16 @@ def create_agent() -> AgentExecutor:
     )
     # Escapar quaisquer chaves restantes para evitar que ChatPromptTemplate trate como variáveis
     system_prompt_text = system_prompt_text.replace("{", "{{").replace("}", "}}")
+    
     # Nos releases 0.1.x do LangChain, utilizamos initialize_agent com OPENAI_FUNCTIONS
     # e passamos o texto do system como "system_message" via agent_kwargs.
+    
+    # ==================================================================
+    # INÍCIO DA CORREÇÃO
+    # ==================================================================
+    # O erro "Got unsupported message type" ocorre porque passamos um 
+    # dicionário em vez de um objeto SystemMessage.
+    
     agent_executor = initialize_agent(
         tools=TOOLS,
         llm=llm,
@@ -274,12 +282,12 @@ def create_agent() -> AgentExecutor:
         max_execution_time=60,
         handle_parsing_errors=True,
         agent_kwargs={
-            "system_message": {
-                "type": "system",
-                "content": system_prompt_text,
-            }
+            "system_message": SystemMessage(content=system_prompt_text)  # <-- CORRIGIDO
         },
     )
+    # ==================================================================
+    # FIM DA CORREÇÃO
+    # ==================================================================
     
     logger.info("✅ Agente criado com sucesso")
     return agent_executor
