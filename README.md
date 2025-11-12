@@ -565,6 +565,30 @@ Use o Dockerfile fornecido para criar uma imagem e deploy em:
 - Confirme o token de autenticação
 - Aumente o timeout em `tools/http_tools.py`
 
+### Redeploy no Easypanel (build do código correto)
+
+Para garantir que o container está rodando com o código atualizado (sem cache e sem referências antigas), execute no host do Easypanel, dentro da pasta que contém o `docker-compose.yml` do serviço:
+
+1. Derrubar serviços:
+   - `docker compose down`
+2. Rebuild sem cache:
+   - `docker compose build --no-cache`
+3. Subir novamente (forçando recriação):
+   - `docker compose up -d --force-recreate`
+4. Listar containers e identificar o do agente:
+   - `docker ps -a` (container esperado: `agente-supermercado`)
+5. Confirmar que o `agent.py` novo entrou (sem referências a proxies):
+   - `docker exec agente-supermercado grep -n "proxies" /app/agent.py` (deve retornar vazio)
+6. Confirmar versões das libs:
+   - `docker exec agente-supermercado sh -lc 'pip show openai langchain-openai | grep -i "Version"'`
+   - Esperado: `openai >= 1.0` (atual: `1.10.0`) e `langchain-openai >= 0.0.5` (atual: `0.0.5`)
+
+Se o passo 5 ainda mostrar `proxies=`:
+- Verifique se o `docker-compose.yml` está usando `build: .` e não uma `image:` pré-construída.
+- Confirme que você está no diretório correto do código que o Easypanel usa para build.
+- Opcional: rode `docker compose build --pull --no-cache` e `docker compose up -d --force-recreate`.
+
+
 ### Logs não aparecem
 
 **Solução:**
