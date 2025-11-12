@@ -306,9 +306,10 @@ def ean_lookup(query: str) -> str:
             # Ordena por score desc
             ordered = [pn for pn, sc in sorted(scored, key=lambda x: x[1], reverse=True)]
             # Mantém apenas os com score >= 1.0 (pelo menos um token da consulta)
-            relevant = [pn for pn, sc in scored if sc >= 1.0]
-            top = [pn for pn, sc in sorted(scored, key=lambda x: x[1], reverse=True) if sc >= 1.0][:10]
-            summary = _format_summary(top)
+            top_relevant = [pn for pn, sc in sorted(scored, key=lambda x: x[1], reverse=True) if sc >= 1.0][:10]
+            # Fallback: se não houver relevantes, use os primeiros pares retornados
+            used_pairs = top_relevant if top_relevant else ordered[:10]
+            summary = _format_summary(used_pairs)
             if summary:
                 sanitized = summary.replace("\n", "; ")
                 logger.info(f"smart-responder resumo extraído: {sanitized}")
@@ -340,8 +341,9 @@ def ean_lookup(query: str) -> str:
                         score += 1.5
                 return score
             scored = [(pn, _score(query, pn[1])) for pn in pairs]
-            top = [pn for pn, sc in sorted(scored, key=lambda x: x[1], reverse=True) if sc >= 1.0][:10]
-            summary = _format_summary(top)
+            top_relevant = [pn for pn, sc in sorted(scored, key=lambda x: x[1], reverse=True) if sc >= 1.0][:10]
+            used_pairs = top_relevant if top_relevant else [pn for pn, _ in scored][:10]
+            summary = _format_summary(used_pairs)
             if summary:
                 return f"{summary}\n\n{text}"
             return text
