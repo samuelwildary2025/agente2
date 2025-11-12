@@ -171,6 +171,25 @@ TOOLS = [
 # Configuração do Agente
 # ============================================
 
+# Wrapper para desabilitar o streaming interno do LangChain/OpenAI.
+# Alguns agentes do LangChain chamam `.stream()` por padrão durante o planejamento.
+# Esta classe faz fallback para uma única resposta não-streaming, evitando que
+# o parâmetro `stream=True` seja enviado para a API da OpenAI.
+class NonStreamingChatOpenAI(ChatOpenAI):
+    def stream(self, input, *args, **kwargs):
+        result = self.invoke(input, **kwargs)
+        content = getattr(result, "content", "")
+        additional_kwargs = getattr(result, "additional_kwargs", {})
+        response_metadata = getattr(result, "response_metadata", {})
+        usage_metadata = getattr(result, "usage_metadata", {})
+        # Emite um único chunk contendo toda a resposta
+        yield AIMessageChunk(
+            content=content,
+            additional_kwargs=additional_kwargs,
+            response_metadata=response_metadata,
+            usage_metadata=usage_metadata,
+        )
+
 def _load_agent_prompt() -> str:
     """Carrega o prompt do agente de um arquivo externo obrigatório."""
     
@@ -208,7 +227,7 @@ def create_agent() -> AgentExecutor:
     llm_kwargs = {
         "model": settings.llm_model,
         "openai_api_key": settings.openai_api_key,
-        "stream": False, # Garantir que não use streaming
+        "stream": False,  # Garantir que não use streaming
     }
     
     if "gpt-5-mini" in str(settings.llm_model):
@@ -223,7 +242,7 @@ def create_agent() -> AgentExecutor:
         "stream": False,
         "temperature": settings.llm_temperature,
     }
-    llm = ChatOpenAI(**llm_kwargs)
+    llm = NonStreamingChatOpenAI(**llm_kwargs)
     logger.info(f"LLM configurado: {settings.llm_model}")
     
     # ==================================================================
