@@ -301,8 +301,14 @@ def ean_lookup(query: str) -> str:
                         score += 1.5
                 return score
 
-            pairs_sorted = sorted(pairs, key=lambda pn: _score(query, pn[1]), reverse=True)
-            summary = _format_summary(pairs_sorted[:5])
+            # Pontuar por relevância e filtrar apenas itens que casam com a consulta
+            scored = [(pn, _score(query, pn[1])) for pn in pairs]
+            # Ordena por score desc
+            ordered = [pn for pn, sc in sorted(scored, key=lambda x: x[1], reverse=True)]
+            # Mantém apenas os com score >= 1.0 (pelo menos um token da consulta)
+            relevant = [pn for pn, sc in scored if sc >= 1.0]
+            top = [pn for pn, sc in sorted(scored, key=lambda x: x[1], reverse=True) if sc >= 1.0][:10]
+            summary = _format_summary(top)
             if summary:
                 sanitized = summary.replace("\n", "; ")
                 logger.info(f"smart-responder resumo extraído: {sanitized}")
@@ -312,7 +318,30 @@ def ean_lookup(query: str) -> str:
         except Exception:
             # Se não for JSON, tentar extrair com regex do texto bruto
             pairs = _extract_pairs_from_text(text)
-            summary = _format_summary(pairs)
+            # Aplicar o mesmo filtro de relevância no texto bruto
+            def _strip_accents(s: str) -> str:
+                try:
+                    import unicodedata
+                    return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+                except Exception:
+                    return s
+            def _score(q: str, nome: str | None) -> float:
+                if not nome:
+                    return 0.0
+                import re as _re
+                qn = _strip_accents((q or '').lower())
+                nn = _strip_accents((nome or '').lower())
+                score = 0.0
+                for tok in _re.findall(r"[\wáéíóúâêîôûãõç]+", qn):
+                    if tok and tok in nn:
+                        score += 1.0
+                for m in _re.findall(r"(\d+\s*(g|kg|ml|l|litro|un))", qn):
+                    if m[0] in nn:
+                        score += 1.5
+                return score
+            scored = [(pn, _score(query, pn[1])) for pn in pairs]
+            top = [pn for pn, sc in sorted(scored, key=lambda x: x[1], reverse=True) if sc >= 1.0][:10]
+            summary = _format_summary(top)
             if summary:
                 return f"{summary}\n\n{text}"
             return text
@@ -501,93 +530,4 @@ def estoque_preco(ean: str) -> str:
         logger.error(msg)
         return msg
 
-    # Remover acentos de crases/backticks se vierem com o valor colado
-    url = url.replace("`", "")
-
-    # Normalizar token: aceitar com ou sem prefixo 'Bearer '
-    auth_value = token if token.lower().startswith("bearer ") else f"Bearer {token}"
-    api_key_value = token[7:].strip() if token.lower().startswith("bearer ") else token
-    headers = {
-        "Authorization": auth_value,
-        "apikey": api_key_value,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-
-    payload = {"query": query}
-    logger.info(f"Consultando smart-responder: {url} query='{query[:80]}'")
-
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=15)
-        status = resp.status_code
-        text = resp.text
-        logger.info(f"smart-responder retorno: status={status}")
-
-        # Tentar interpretar como JSON e extrair EAN/nome quando possível
-        try:
-            data = resp.json()
-
-            def _get_first_str(obj: Dict[str, Any], keys):
-                for k in keys:
-                    v = obj.get(k)
-                    if isinstance(v, str) and v.strip():
-                        return v.strip()
-                return None
-
-            def _extract_summary(payload: Any):
-                ean_val = None
-                name_val = None
-
-                def try_obj(d: Dict[str, Any]):
-                    nonlocal ean_val, name_val
-                    if ean_val is None:
-                        ean_val = _get_first_str(d, ["ean", "ean_code", "codigo_ean", "barcode", "gtin"]) 
-                    if name_val is None:
-                        name_val = _get_first_str(d, ["produto", "product", "name", "nome", "title", "descricao", "description"]) 
-
-                if isinstance(payload, dict):
-                    # testar o próprio dict
-                    try_obj(payload)
-                    # testar campos comuns que podem conter o resultado
-                    for key in ("result", "data", "item", "response"):
-                        val = payload.get(key)
-                        if isinstance(val, dict):
-                            try_obj(val)
-                        elif isinstance(val, list):
-                            for it in val:
-                                if isinstance(it, dict):
-                                    try_obj(it)
-                elif isinstance(payload, list):
-                    for it in payload:
-                        if isinstance(it, dict):
-                            try_obj(it)
-
-                if ean_val:
-                    summary = f"EAN: {ean_val}"
-                    if name_val:
-                        summary += f" • Produto: {name_val}"
-                    return summary
-                return None
-
-            summary = _extract_summary(data)
-            if summary:
-                logger.info(f"smart-responder resumo extraído: {summary}")
-                return f"{summary}\n\n{json.dumps(data, indent=2, ensure_ascii=False)}"
-            else:
-                return json.dumps(data, indent=2, ensure_ascii=False)
-        except Exception:
-            # Se não for JSON, devolver texto bruto
-            return text
-
-    except requests.exceptions.Timeout:
-        msg = "Erro: Timeout ao consultar smart-responder. Tente novamente."
-        logger.error(msg)
-        return msg
-    except requests.exceptions.HTTPError as e:
-        msg = f"Erro HTTP no smart-responder: {getattr(e.response, 'status_code', '?')} - {getattr(e.response, 'text', '')}"
-        logger.error(msg)
-        return msg
-    except requests.exceptions.RequestException as e:
-        msg = f"Erro ao consultar smart-responder: {str(e)}"
-        logger.error(msg)
-        return msg
+    # [Cleanup] Removido bloco duplicado de ean_lookup antigo fora de função
