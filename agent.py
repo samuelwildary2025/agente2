@@ -5,7 +5,7 @@ Utiliza LangChain para orquestração de ferramentas e memória de conversação
 from typing import Dict, Any
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessageChunk
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.agents import AgentExecutor, initialize_agent, AgentType
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool
 from langchain_community.chat_message_histories import PostgresChatMessageHistory
@@ -261,24 +261,19 @@ def create_agent() -> AgentExecutor:
     )
     # Escapar quaisquer chaves restantes para evitar que ChatPromptTemplate trate como variáveis
     system_prompt_text = system_prompt_text.replace("{", "{{").replace("}", "}}")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt_text),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ])
-    
-    # Criar agente
-    agent = create_tool_calling_agent(llm, TOOLS, prompt)
-    
-    # Criar executor
-    agent_executor = AgentExecutor(
-        agent=agent,
+    # Nos releases 0.1.x do LangChain, utilizamos initialize_agent com OPENAI_FUNCTIONS
+    # e passamos o texto do system como "system_message" via agent_kwargs.
+    agent_executor = initialize_agent(
         tools=TOOLS,
+        llm=llm,
+        agent=AgentType.OPENAI_FUNCTIONS,
         verbose=settings.debug_mode,
         max_iterations=10,
         max_execution_time=60,
-        handle_parsing_errors=True
+        handle_parsing_errors=True,
+        agent_kwargs={
+            "system_message": system_prompt_text
+        },
     )
     
     logger.info("✅ Agente criado com sucesso")

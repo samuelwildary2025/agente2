@@ -891,6 +891,85 @@ async def webhook_whatsapp(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
 
+# Aliases UAZ para compatibilidade com integrações existentes
+@app.post("/webhook/uaz")
+async def webhook_uaz_post(request: Request, background_tasks: BackgroundTasks):
+    """
+    Alias de POST para o webhook oficial do WhatsApp.
+    Algumas integrações enviam para "/webhook/uaz"; delegamos para o mesmo fluxo.
+    """
+    return await webhook_whatsapp(request, background_tasks)
+
+
+@app.get("/webhook/uaz")
+async def webhook_uaz_get():
+    """
+    GET informativo para o alias do webhook UAZ.
+    Útil para verificações de disponibilidade.
+    """
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "ok",
+            "endpoint": "/webhook/uaz",
+            "alias_of": "/webhook/whatsapp",
+            "message": "Use POST para enviar eventos de mensagem.",
+            "health": "/health",
+        },
+    )
+
+
+# Endpoints de dryrun para testes rápidos do agente
+class DryRunRequest(BaseModel):
+    telefone: str = Field(..., description="Número do cliente no formato internacional")
+    mensagem: str = Field(..., description="Mensagem de teste para o agente")
+
+
+@app.get("/agent/dryrun")
+async def agent_dryrun_get():
+    """
+    Endpoint GET informativo para dryrun do agente.
+    """
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "ready",
+            "endpoint": "/agent/dryrun",
+            "method": "POST",
+            "body": {
+                "telefone": "5511999999999",
+                "mensagem": "Quero Coca 2L",
+            },
+        },
+    )
+
+
+@app.post("/agent/dryrun")
+async def agent_dryrun_post(req: DryRunRequest) -> AgentResponse:
+    """
+    Executa o agente diretamente sem passar pelo WhatsApp.
+    Útil para testes de fluxo.
+    """
+    try:
+        result = run_agent(req.telefone, req.mensagem)
+        return AgentResponse(
+            success=result["error"] is None,
+            response=result["output"],
+            telefone=req.telefone,
+            timestamp=datetime.now().isoformat(),
+            error=result["error"],
+        )
+    except Exception as e:
+        logger.error(f"Erro no dryrun do agente: {e}", exc_info=True)
+        return AgentResponse(
+            success=False,
+            response="Erro ao executar dryrun do agente",
+            telefone=req.telefone,
+            timestamp=datetime.now().isoformat(),
+            error=str(e),
+        )
+
+
 @app.post("/presence")
 async def presence(request: PresenceRequest, background_tasks: BackgroundTasks):
     """Envia atualização de presença de forma assíncrona.
