@@ -3,6 +3,7 @@ Agente de IA para Atendimento de Supermercado
 Utiliza LangChain para orquestração de ferramentas e memória de conversação
 """
 from typing import Dict, Any
+import os
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessageChunk
 from langchain.agents import AgentExecutor, initialize_agent, AgentType
@@ -221,6 +222,23 @@ def create_agent() -> AgentExecutor:
     Cria e retorna o AgentExecutor configurado
     """
     logger.info("Criando agente de IA...")
+    
+    # Remover variáveis de proxy do ambiente para evitar incompatibilidade
+    # com clientes que não aceitam 'proxies' no construtor (ex.: OpenAI em
+    # certas combinações de versões).
+    proxy_vars = [
+        "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+        "http_proxy", "https_proxy", "all_proxy",
+    ]
+    removed = []
+    for var in proxy_vars:
+        if os.environ.pop(var, None) is not None:
+            removed.append(var)
+    if removed:
+        try:
+            logger.warning(f"Removidas variáveis de proxy do ambiente: {', '.join(removed)}")
+        except Exception:
+            pass
     
     # Inicializar LLM (ajuste para modelos que não aceitam temperature!=1)
     llm_kwargs = {
