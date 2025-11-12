@@ -208,7 +208,7 @@ def create_agent() -> AgentExecutor:
     llm_kwargs = {
         "model": settings.llm_model,
         "openai_api_key": settings.openai_api_key,
-        "streaming": False, # Garantir que não use streaming
+        "stream": False, # Garantir que não use streaming
     }
     
     if "gpt-5-mini" in str(settings.llm_model):
@@ -220,7 +220,7 @@ def create_agent() -> AgentExecutor:
     llm_kwargs = {
         "model": settings.llm_model,
         "openai_api_key": settings.openai_api_key,
-        "streaming": False,
+        "stream": False,
         "temperature": settings.llm_temperature,
     }
     llm = ChatOpenAI(**llm_kwargs)
