@@ -214,7 +214,7 @@ def create_agent() -> AgentExecutor:
     if "gpt-5-mini" in str(settings.llm_model):
         llm_kwargs["temperature"] = 1.0
     else:
-        llm_kwargs["temperature"] = settings.llm_temperature
+        llm_kwargs["temperature"] = 1.0
 
     # Remover import do cliente OpenAI
     llm_kwargs = {
