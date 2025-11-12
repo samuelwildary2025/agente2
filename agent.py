@@ -3,7 +3,7 @@ Agente de IA para Atendimento de Supermercado
 Utiliza LangChain para orquestração de ferramentas e memória de conversação
 """
 from typing import Dict, Any
-import os  # <-- CORREÇÃO: Adicionado import
+import os
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 from langchain_core.messages import AIMessageChunk
@@ -13,6 +13,7 @@ from langchain_core.tools import tool
 from langchain_community.chat_message_histories import PostgresChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from pathlib import Path
+import httpx # <-- CORREÇÃO: Importar httpx
 
 from config.settings import settings
 from config.logger import setup_logger
@@ -224,21 +225,24 @@ def create_agent() -> AgentExecutor:
     """
     logger.info("Criando agente de IA...")
 
-    # --- CORREÇÃO: Início ---
-    # Limpa variáveis de proxy do ambiente para evitar conflito
-    # com o cliente OpenAI v1.x (que não aceita 'proxies').
-    # Isso é comum em ambientes Docker como Easypanel.
+    # --- CORREÇÃO v2: Início ---
+    # Limpa variáveis de proxy do ambiente
     os.environ.pop("http_proxy", None)
     os.environ.pop("https_proxy", None)
     os.environ.pop("HTTP_PROXY", None)
     os.environ.pop("HTTPS_PROXY", None)
     logger.info("Variáveis de ambiente de proxy (se existiam) foram removidas.")
-    # --- CORREÇÃO: Fim ---
+    
+    # Cria um cliente HTTP explícito sem proxies
+    http_client = httpx.Client(proxies={})
+    logger.info("Cliente HTTP httpx criado sem proxies.")
+    # --- CORREÇÃO v2: Fim ---
     
     # Inicializar LLM (ajuste para modelos que não aceitam temperature!=1)
     llm_kwargs = {
         "model": settings.llm_model,
         "openai_api_key": settings.openai_api_key,
+        "http_client": http_client # <-- CORREÇÃO v2: Passa o http_client
     }
     # Evitar streaming em modelos que não suportam
     llm_kwargs["streaming"] = False
@@ -264,16 +268,18 @@ def create_agent() -> AgentExecutor:
     # Tentar usar cliente OpenAI explícito; se não suportado pela versão instalada, fazer fallback
     llm = None
     try:
-        explicit_client = OpenAI(api_key=settings.openai_api_key)
+        # CORREÇÃO v2: Passa o http_client também para o cliente OpenAI explícito
+        explicit_client = OpenAI(api_key=settings.openai_api_key, http_client=http_client)
         try:
+            # CORREÇÃO v2: `http_client` já está em llm_kwargs, mas 'client' é o cliente OpenAI
             llm = NonStreamingChatOpenAI(**{**llm_kwargs, "client": explicit_client})
-            logger.info("LLM criado com cliente OpenAI explícito")
+            logger.info("LLM criado com cliente OpenAI explícito (e http_client customizado)")
         except Exception as e:
             logger.warning(f"Cliente explícito não suportado pelo ChatOpenAI atual: {e}. Fallback sem 'client'.")
-            llm = NonStreamingChatOpenAI(**llm_kwargs)
+            llm = NonStreamingChatOpenAI(**llm_kwargs) # <-- CORREÇÃO v2: Ainda terá o http_client
     except Exception as e:
         logger.warning(f"Falha ao instanciar cliente OpenAI: {e}. Usando ChatOpenAI padrão.")
-        llm = NonStreamingChatOpenAI(**llm_kwargs)
+        llm = NonStreamingChatOpenAI(**llm_kwargs) # <-- CORREÇÃO v2: Ainda terá o http_client
     logger.info(f"LLM configurado: {settings.llm_model}")
     
     # Definir prompt do agente (carregado de arquivo com placeholders)
