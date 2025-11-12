@@ -38,11 +38,18 @@ else
   echo "[SKIP] Check de 'proxies' pulado por não detectar container."
 fi
 
-echo "[6/6] Confirmando versões das libs openai e langchain-openai..."
+echo "[6/7] Confirmando versões das libs openai e langchain-openai..."
 if [[ -n "${AGENTE_CONTAINER}" ]]; then
   docker exec "${AGENTE_CONTAINER}" sh -lc 'pip show openai langchain-openai | grep -i "Version"'
 else
   echo "[SKIP] Check de versões pulado por não detectar container."
+fi
+
+echo "[7/7] Conferindo versão do httpx..."
+if [[ -n "${AGENTE_CONTAINER}" ]]; then
+  docker exec "${AGENTE_CONTAINER}" sh -lc 'pip show httpx | grep -i "Version" || echo "httpx não instalado via pip (pode ser dependência transitiva)"'
+else
+  echo "[SKIP] Check de httpx pulado por não detectar container."
 fi
 
 echo "[DONE] Redeploy concluído."
