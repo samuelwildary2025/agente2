@@ -4,11 +4,11 @@ Utiliza LangChain para orquestração de ferramentas e memória de conversação
 """
 from typing import Dict, Any
 import os
-import httpx  # Necessário para a correção do proxy
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 from langchain_core.messages import AIMessageChunk
 from langchain.agents import AgentExecutor, initialize_agent, AgentType
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool
 from langchain_community.chat_message_histories import PostgresChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -22,138 +22,261 @@ from tools.time_tool import get_current_time
 
 logger = setup_logger(__name__)
 
+
 # ============================================
 # Definição das Ferramentas (Tools)
 # ============================================
 
 @tool
 def estoque_tool(url: str) -> str:
-    """Consulta estoque e preço (Use URL completa)."""
+    """
+    Consultar estoque e preço atual dos produtos no sistema do supermercado.
+    
+    A URL completa para a consulta deve ser fornecida, por exemplo:
+    'https://wildhub-wildhub-sistema-supermercado.5mos1l.easypanel.host/api/produtos/consulta?nome=arroz'
+    
+    Use esta ferramenta quando o cliente perguntar sobre disponibilidade ou preço de produtos.
+    """
     return estoque(url)
+
 
 @tool
 def pedidos_tool(json_body: str) -> str:
-    """Envia pedido finalizado (JSON string)."""
+    """
+    Enviar o pedido finalizado para o painel dos funcionários (dashboard).
+    
+    O corpo da requisição deve ser um JSON (em formato string) com os detalhes do pedido.
+    Exemplo: '{"cliente": "João Silva", "telefone": "5511999998888", "itens": [{"produto": "Arroz Integral 1kg", "quantidade": 2, "preco": 8.50}], "total": 17.00}'
+    
+    Use esta ferramenta SOMENTE quando o cliente confirmar que deseja finalizar o pedido.
+    """
     return pedidos(json_body)
+
 
 @tool
 def alterar_tool(telefone: str, json_body: str) -> str:
-    """Atualiza pedido existente."""
+    """
+    Atualizar o pedido no painel dos funcionários (dashboard).
+    
+    O telefone do cliente deve ser fornecido para identificar o pedido.
+    O corpo da requisição deve ser um JSON (em formato string) com os dados a serem atualizados.
+    
+    Exemplo: alterar_tool("5511987654321", '{"status": "cancelado", "motivo": "Cliente desistiu"}')
+    
+    Use esta ferramenta quando o cliente quiser modificar ou cancelar um pedido existente.
+    """
     return alterar(telefone, json_body)
+
 
 @tool
 def set_tool(telefone: str, valor: str = "ativo", ttl: int = 600) -> str:
-    """Marca pedido como ativo no Redis."""
+    """
+    Define uma chave no Redis para indicar que um pedido está ativo.
+    
+    A chave é formada por: {telefone}pedido
+    O TTL padrão é de 600 segundos (10 minutos).
+    
+    Use esta ferramenta APÓS finalizar um pedido com sucesso para marcar que o cliente tem um pedido ativo.
+    """
     return set_pedido_ativo(telefone, valor, ttl)
+
 
 @tool
 def confirme_tool(telefone: str) -> str:
-    """Verifica pedido ativo no Redis."""
+    """
+    Verifica se um pedido está ativo no Redis.
+    
+    A chave é formada por: {telefone}pedido
+    Retorna o valor da chave ou uma mensagem de que não foi encontrado.
+    
+    Use esta ferramenta para verificar se o cliente já tem um pedido em andamento antes de criar um novo.
+    """
     return confirme_pedido_ativo(telefone)
+
 
 @tool
 def time_tool() -> str:
-    """Retorna data e hora atual."""
+    """
+    Retorna a data e hora atual no fuso horário de São Paulo (America/Sao_Paulo).
+    
+    Use esta ferramenta quando o cliente perguntar sobre horário de funcionamento,
+    horário de entrega, ou qualquer informação relacionada ao tempo.
+    """
     return get_current_time()
+
 
 @tool
 def ean_tool(query: str) -> str:
-    """Busca EAN/infos do produto via smart-responder."""
+    """
+    Buscar EAN/infos do produto via Supabase Functions (smart-responder).
+    Envie o texto mencionado pelo cliente (nome/descrição) como 'query'.
+    """
     return ean_lookup(query)
 
 @tool("ean")
 def ean_tool_alias(query: str) -> str:
-    """Alias para ean_tool."""
+    """
+    Alias de ferramenta: `ean`
+    Buscar EAN/infos do produto via smart-responder enviando o nome/descrição.
+    """
     return ean_lookup(query)
+
 
 @tool
 def estoque_preco_tool(ean: str) -> str:
-    """Consulta preço/disponibilidade por EAN (apenas dígitos)."""
+    """
+    Consultar preço e disponibilidade pelo EAN.
+    Informe apenas os dígitos do código EAN.
+
+    Observações:
+    - Retorna somente itens com disponibilidade/estoque positivo.
+    - Remove campos de quantidade de estoque da saída.
+    - Normaliza o preço no campo "preco" quando possível.
+    Use esta ferramenta para montar opções (nome + variação + preço)
+    e perguntar tamanho/gramagem quando o pedido for genérico.
+    """
     return estoque_preco(ean)
 
 @tool("estoque")
 def estoque_preco_alias(ean: str) -> str:
-    """Alias para estoque_preco_tool."""
+    """
+    Alias de ferramenta: `estoque`
+    Consulta preço e disponibilidade pelo EAN (apenas dígitos).
+    Filtra apenas itens com estoque e normaliza o preço em `preco`.
+    """
     return estoque_preco(ean)
 
+
+
+# Lista de todas as ferramentas
 TOOLS = [
-    estoque_tool, pedidos_tool, alterar_tool, set_tool, confirme_tool,
-    time_tool, ean_tool, ean_tool_alias, estoque_preco_tool, estoque_preco_alias
+    estoque_tool,
+    pedidos_tool,
+    alterar_tool,
+    set_tool,
+    confirme_tool,
+    time_tool,
+    ean_tool,
+    ean_tool_alias,
+    estoque_preco_tool,
+    estoque_preco_alias,
+    
 ]
+
 
 # ============================================
 # Configuração do Agente
 # ============================================
 
 def _load_agent_prompt() -> str:
+    """Carrega o prompt do agente de um arquivo externo, com fallback.
+
+    Se `settings.agent_prompt_path` estiver definido, tenta ler desse caminho.
+    Caso contrário, tenta `prompts/agent_system.md` relativo ao projeto.
+    Se houver falha, retorna o prompt embutido padrão.
+    """
+    # Prompt padrão embutido (fallback)
     default_prompt = (
-        "Você é um atendente virtual de um supermercado. "
-        "Base URL da API: {base_url}\nBase URL EAN: {ean_base}"
+        "Você é um atendente virtual de um supermercado brasileiro. Sua função é auxiliar os clientes com:\n\n"
+        "- Informações sobre produtos, estoque e preços\n"
+        "- Criação e gerenciamento de pedidos\n"
+        "- Dúvidas sobre políticas da empresa (devoluções, entregas, etc.)\n"
+        "- Informações gerais sobre horários e serviços\n\n"
+        "INSTRUÇÕES IMPORTANTES:\n\n"
+        "1. SEMPRE chame ean_tool primeiro quando a mensagem mencionar produto, EAN, código de barras, SKU ou quando a intenção for identificar/confirmar o produto. Após obter a resposta, informe claramente o EAN e o nome do produto se disponíveis. Não invente EAN.\n"
+        "   - Se já tiver o EAN, use estoque_preco_tool(ean) para consultar preço e disponibilidade.\n\n"
+        "2. Para consultar produtos:\n"
+        "   - Use estoque_tool com a URL completa: {base_url}/produtos/consulta?nome=<nome_do_produto>\n"
+        "   - Substitua <nome_do_produto> pelo nome do produto que o cliente mencionou\n\n"
+        "3. Para criar pedidos:\n"
+        "   - SEMPRE verifique primeiro se o cliente já tem um pedido ativo usando confirme_tool\n"
+        "   - Confirme TODOS os detalhes com o cliente antes de finalizar\n"
+        "   - Use pedidos_tool com JSON completo incluindo: cliente, telefone, itens (produto, quantidade, preco), total\n"
+        "   - APÓS criar o pedido com sucesso, use set_tool para marcar como ativo\n\n"
+        "4. Para alterar/cancelar pedidos:\n"
+        "   - Use alterar_tool com o telefone e JSON de atualização\n\n"
+        "5. Seja cordial, profissional e eficiente.\n"
+        "   - Após usar ean_tool, se a resposta não trouxer EAN, peça mais detalhes objetivos (marca, sabor, tamanho, peso) e tente novamente.\n\n"
+        "6. O telefone do cliente é essencial — ele é usado como identificador único para memória e pedidos.\n\n"
+        "Base URL da API: {base_url}\n"
+        "Base URL EAN (preço/estoque): {ean_base}\n"
     )
+
+    # Resolver caminho do arquivo
     prompt_path = settings.agent_prompt_path
     if not prompt_path:
+        # Default: prompts/agent_system.md ao lado do projeto
         base_dir = Path(__file__).resolve().parent
         prompt_path = str((base_dir / "prompts" / "agent_system.md"))
 
     try:
-        return Path(prompt_path).read_text(encoding="utf-8")
-    except Exception:
+        text = Path(prompt_path).read_text(encoding="utf-8")
+        logger.info(f"Carregado prompt externo em: {prompt_path}")
+        return text
+    except Exception as e:
+        logger.warning(f"Falha ao carregar prompt externo ({prompt_path}); usando padrão embutido. Erro: {e}")
         return default_prompt
 
-def create_agent() -> AgentExecutor:
-    """Cria e retorna o AgentExecutor configurado com correção de Proxy."""
-    
-    # --- CORREÇÃO DE PROXY E VERSÃO ---
-    logger.info("=== INICIANDO AGENTE: VERSÃO CORRIGIDA V3 ===")
-    
-    # 1. Limpar variáveis de ambiente que causam conflito
-    for env_var in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"]:
-        if os.environ.pop(env_var, None):
-            logger.info(f"Variável {env_var} removida do ambiente.")
-            
-    # 2. Criar cliente HTTP limpo (sem proxies)
-    http_client = httpx.Client(proxies={})
-    logger.info("Cliente HTTP (httpx) criado forçando sem proxies.")
-    # ----------------------------------
 
+def create_agent() -> AgentExecutor:
+    """
+    Cria e retorna o AgentExecutor configurado
+    """
+    logger.info("Criando agente de IA (VERSÃO ORIGINAL)...") # <-- Log alterado
+    
+    # Inicializar LLM (ajuste para modelos que não aceitam temperature!=1)
     llm_kwargs = {
         "model": settings.llm_model,
         "openai_api_key": settings.openai_api_key,
-        "http_client": http_client  # Injeta o cliente limpo
     }
+    # Evitar streaming em modelos que não suportam
     llm_kwargs["streaming"] = False
-    
+    # Alguns modelos (ex.: gpt-5-mini) não aceitam temperature diferente do default
     if "gpt-5-mini" in str(settings.llm_model):
         llm_kwargs["temperature"] = 1.0
     else:
         llm_kwargs["temperature"] = settings.llm_temperature
-
     class NonStreamingChatOpenAI(ChatOpenAI):
+        # Força o caminho sem streaming mesmo se o agente usar .stream()
         def stream(self, input, config=None, **kwargs):
             try:
                 msg = self.invoke(input, config=config, **kwargs)
-                yield AIMessageChunk(content=msg.content)
+                yield AIMessageChunk(
+                    content=msg.content,
+                    additional_kwargs=getattr(msg, "additional_kwargs", {}),
+                    tool_calls=getattr(msg, "tool_calls", None),
+                )
             except Exception as e:
+                # Em caso de erro, propaga como chunk único com conteúdo vazio
                 yield AIMessageChunk(content=f"Erro: {str(e)}")
 
-    # Tentar instanciar LLM
+    # Tentar usar cliente OpenAI explícito; se não suportado pela versão instalada, fazer fallback
+    llm = None
     try:
-        # Passa o http_client para o cliente OpenAI oficial também
-        explicit_client = OpenAI(
-            api_key=settings.openai_api_key,
-            http_client=http_client
-        )
-        llm = NonStreamingChatOpenAI(**{**llm_kwargs, "client": explicit_client})
-        logger.info("LLM criado com sucesso usando cliente explícito.")
+        explicit_client = OpenAI(api_key=settings.openai_api_key)
+        try:
+            llm = NonStreamingChatOpenAI(**{**llm_kwargs, "client": explicit_client})
+            logger.info("LLM criado com cliente OpenAI explícito")
+        except Exception as e:
+            logger.warning(f"Cliente explícito não suportado pelo ChatOpenAI atual: {e}. Fallback sem 'client'.")
+            llm = NonStreamingChatOpenAI(**llm_kwargs)
     except Exception as e:
-        logger.warning(f"Fallback LLM devido a erro: {e}")
+        logger.warning(f"Falha ao instanciar cliente OpenAI: {e}. Usando ChatOpenAI padrão.")
         llm = NonStreamingChatOpenAI(**llm_kwargs)
-
-    system_prompt_text = _load_agent_prompt()\
-        .replace("{base_url}", settings.supermercado_base_url)\
-        .replace("{ean_base}", settings.estoque_ean_base_url)\
-        .replace("{", "{{").replace("}", "}}")
-
+    logger.info(f"LLM configurado: {settings.llm_model}")
+    
+    # Definir prompt do agente (carregado de arquivo com placeholders)
+    system_prompt_raw = _load_agent_prompt()
+    # Evitar KeyError por chaves JSON/markdown com { } no arquivo de prompt
+    system_prompt_text = (
+        system_prompt_raw
+        .replace("{base_url}", settings.supermercado_base_url)
+        .replace("{ean_base}", settings.estoque_ean_base_url)
+    )
+    # Escapar quaisquer chaves restantes para evitar que ChatPromptTemplate trate como variáveis
+    system_prompt_text = system_prompt_text.replace("{", "{{").replace("}", "}}")
+    # Nos releases 0.1.x do LangChain, utilizamos initialize_agent com OPENAI_FUNCTIONS
+    # e passamos o texto do system como "system_message" via agent_kwargs.
     agent_executor = initialize_agent(
         tools=TOOLS,
         llm=llm,
@@ -170,46 +293,248 @@ def create_agent() -> AgentExecutor:
         },
     )
     
+    logger.info("✅ Agente criado com sucesso")
     return agent_executor
 
+
 # ============================================
-# Memória e Execução
+# Função de Memória
 # ============================================
 
 def get_session_history(session_id: str) -> PostgresChatMessageHistory:
+    """
+    Carrega o histórico de mensagens do Postgres.
+    O session_id é o telefone do cliente.
+    """
     return PostgresChatMessageHistory(
         connection_string=settings.postgres_connection_string,
         session_id=session_id,
         table_name=settings.postgres_table_name
     )
 
+
+# ============================================
+# Agente com Memória
+# ============================================
+
+# Criar agente global
+_agent_executor = None
 _agent_with_history = None
 
+
 def get_agent_with_history():
-    global _agent_with_history
+    """
+    Retorna o agente com histórico de mensagens (singleton)
+    """
+    global _agent_executor, _agent_with_history
+    
     if _agent_with_history is None:
-        agent = create_agent()
+        _agent_executor = create_agent()
+        
         _agent_with_history = RunnableWithMessageHistory(
-            agent,
+            _agent_executor,
             get_session_history,
             input_messages_key="input",
             history_messages_key="chat_history",
         )
+        
+        logger.info("✅ Agente com histórico de mensagens configurado")
+    
     return _agent_with_history
 
+
+# ============================================
+# Função Principal de Execução
+# ============================================
+
 def run_agent(telefone: str, mensagem: str) -> Dict[str, Any]:
-    logger.info(f"Executando agente V3 para: {telefone}")
+    """
+    Executa o agente com uma mensagem e um ID de sessão (telefone).
+    
+    Args:
+        telefone: Telefone do cliente (usado como session_id)
+        mensagem: Mensagem do cliente
+    
+    Returns:
+        Dict com 'output' (resposta do agente) e 'error' (se houver)
+    """
+    logger.info(f"Executando agente para telefone: {telefone}")
+    logger.debug(f"Mensagem recebida: {mensagem}")
+
     try:
-        # (Lógica simplificada de pipeline proativo removida para focar na correção do erro principal)
-        # Se precisar da lógica de EAN proativa de volta, basta descomentar ou manter a sua versão anterior,
-        # mas certifique-se de manter a função create_agent corrigida acima.
-        
+        # Pipeline proativo: Produto → EAN → Estoque/Preço, com resposta natural
+        # Se conseguirmos resolver pelo pipeline, retornamos sem envolver o LLM.
+        import re, json
+
+        def _extrair_pares(texto: str) -> list[tuple[str, str]]:
+            pares: list[tuple[str, str]] = []
+            if not texto:
+                return pares
+            if "EANS_ENCONTRADOS:" in texto:
+                for linha in texto.splitlines():
+                    m = re.search(r"^\s*\d+\)\s*([0-9]{8,14})\s*-\s*(.+)$", linha)
+                    if m:
+                        pares.append((m.group(1).strip(), m.group(2).strip()))
+            if not pares:
+                eans = re.findall(r'"codigo_ean"\s*:\s*([0-9]{8,14})', texto)
+                nomes = re.findall(r'"produto"\s*:\s*"([^"]+)"', texto)
+                for e, n in zip(eans, nomes):
+                    pares.append((e.strip(), n.strip()))
+            return pares
+
+        def _extrair_variacao(nome: str) -> str | None:
+            m = re.search(r"\b(\d+[\.,]?\d*\s*(?:l|L|ml|g|kg))\b", nome)
+            if m:
+                return m.group(1).replace("L", "L").replace("l", "L").replace("ML", "ml")
+            return None
+
+        def _format_item(op: dict) -> str | None:
+            nome = op.get("produto") or op.get("nome") or op.get("descricao")
+            preco = op.get("preco")
+            if not nome:
+                return None
+            if preco is not None:
+                try:
+                    valor = float(str(preco).replace(",", "."))
+                    preco_fmt = f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                except Exception:
+                    preco_fmt = f"R${preco}"
+            else:
+                preco_fmt = "preço indisponível"
+            return f"{nome} — {preco_fmt}"
+
+        # Tentativa de resolução automática via EAN
+        ean_resp = ean_lookup(mensagem)
+        pares = _extrair_pares(ean_resp)
+
+        if pares:
+            todas_opcoes: list[dict] = []
+            for ean, nome in pares[:5]:
+                try:
+                    estoque_str = estoque_preco(ean)
+                    itens = json.loads(estoque_str)
+                    if isinstance(itens, list):
+                        for it in itens:
+                            todas_opcoes.append(it)
+                except Exception:
+                    continue
+
+            # Filtra somente itens com nome e preço
+            opcoes_formatadas = []
+            for it in todas_opcoes:
+                linha = _format_item(it)
+                if linha:
+                    opcoes_formatadas.append((linha, _extrair_variacao(linha or "")))
+
+            # Se não achou opções válidas, cai para LLM
+            if opcoes_formatadas:
+                # Detectar se é genérico (múltiplas variações)
+                variacoes = {v for _, v in opcoes_formatadas if v}
+                texto_listagem = "\n".join([f"- {linha}" for linha, _ in opcoes_formatadas[:5]])
+                if len(variacoes) >= 2:
+                    pergunta = "Qual você prefere? Tenho " + ", ".join(sorted(variacoes)) + "."
+                else:
+                    pergunta = "Posso adicionar ao seu pedido?"
+
+                resposta_natural = (
+                    "Encontrei algumas opções disponíveis em estoque:\n"
+                    f"{texto_listagem}\n"
+                    f"{pergunta}"
+                )
+                logger.info("✅ Resposta gerada pelo pipeline proativo")
+                return {"output": resposta_natural, "error": None}
+
+        # Fallback: consulta por nome direto na API principal quando não houver EAN
+        try:
+            from urllib.parse import quote
+            url = f"{settings.supermercado_base_url}/produtos/consulta?nome={quote(mensagem.strip())}"
+            estoque_json = estoque(url)
+            itens = json.loads(estoque_json)
+            if isinstance(itens, list) and itens:
+                # Reaproveitar heurísticas simples de preço/variação
+                def _tem_estoque(d: dict) -> bool:
+                    for k in ("estoque", "qtd", "qtde", "qtd_estoque", "quantidade", "quantidade_disponivel"):
+                        if k in d:
+                            try:
+                                if float(str(d.get(k)).replace(',', '.')) > 0:
+                                    return True
+                            except Exception:
+                                pass
+                    # Alguns endpoints usam booleanos
+                    for k in ("disponibilidade", "disponivel", "in_stock"):
+                        v = d.get(k)
+                        if isinstance(v, bool) and v:
+                            return True
+                        if isinstance(v, str) and v.strip().lower() in {"true", "sim", "yes"}:
+                            return True
+                    return False
+
+                def _preco(d: dict) -> float | None:
+                    for k in ("vl_produto", "vl_produto_normal", "preco", "preco_venda", "valor", "valor_unitario"):
+                        if k in d:
+                            try:
+                                return float(str(d.get(k)).replace('.', '').replace(',', '.'))
+                            except Exception:
+                                pass
+                    return None
+
+                candidatos = []
+                for it in itens:
+                    if not isinstance(it, dict):
+                        continue
+                    if not _tem_estoque(it):
+                        continue
+                    nome = it.get("produto") or it.get("nome") or it.get("descricao")
+                    preco = _preco(it)
+                    if nome:
+                        if preco is not None:
+                            pf = f"R${preco:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        else:
+                            pf = "preço indisponível"
+                        candidatos.append((f"{nome} — {pf}", _extrair_variacao(nome)))
+
+                if candidatos:
+                    variacoes = {v for _, v in candidatos if v}
+                    texto_listagem = "\n".join([f"- {linha}" for linha, _ in candidatos[:5]])
+                    if len(variacoes) >= 2:
+                        pergunta = "Qual você prefere? Tenho " + ", ".join(sorted(variacoes)) + "."
+                    else:
+                        pergunta = "Posso adicionar ao seu pedido?"
+                    resposta_natural = (
+                        "Achei opções com estoque pelo nome informado:\n"
+                        f"{texto_listagem}\n"
+                        f"{pergunta}"
+                    )
+                    logger.info("✅ Resposta gerada pelo fallback de nome")
+                    return {"output": resposta_natural, "error": None}
+        except Exception as _e:
+            logger.warning(f"Falha no fallback de nome: {_e}")
+
+        # Se pipeline não resolveu:
+        # Caso específico: smart-responder não configurado → evitar erro e pedir clarificação
+        if isinstance(ean_resp, str) and "SMART_RESPONDER_URL" in ean_resp:
+            pergunta = (
+                "Para confirmar direitinho: prefere Coca-Cola de 2L, 1L ou lata? "
+                "Assim eu já te trago o preço certinho do que estiver disponível."
+            )
+            logger.info("✅ Retorno de clarificação por falta de smart-responder")
+            return {"output": pergunta, "error": None}
+
+        # Delegar ao LLM (com ferramentas e memória)
         agent = get_agent_with_history()
         response = agent.invoke(
             {"input": mensagem},
             config={"configurable": {"session_id": telefone}},
         )
-        return {"output": response.get("output", ""), "error": None}
+        output = response.get("output", "Desculpe, não consegui processar sua mensagem.")
+        logger.info("✅ Agente executado com sucesso (LLM)")
+        logger.debug(f"Resposta: {output}")
+        return {"output": output, "error": None}
     except Exception as e:
-        logger.error(f"Erro fatal no agente: {e}", exc_info=True)
-        return {"output": "Erro no sistema.", "error": str(e)}
+        error_msg = f"Erro ao executar agente: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        
+        return {
+            "output": "Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente.",
+            "error": error_msg
+        }
