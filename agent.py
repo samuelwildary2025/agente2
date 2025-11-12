@@ -6,6 +6,7 @@ from typing import Dict, Any
 import os  # Correção para 'proxies'
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
+import httpx
 from langchain_core.messages import AIMessageChunk
 from langchain.agents import AgentExecutor, initialize_agent, AgentType
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -236,7 +237,11 @@ def create_agent() -> AgentExecutor:
     # Tentar usar cliente OpenAI explícito; se não suportado pela versão instalada, fazer fallback
     llm = None
     try:
-        explicit_client = OpenAI(api_key=settings.openai_api_key)
+        explicit_client = OpenAI(
+            api_key=settings.openai_api_key,
+            # Evita leitura de variáveis de ambiente (HTTP(S)_PROXY) e remove dependência de 'proxies'
+            http_client=httpx.Client(trust_env=False, follow_redirects=True),
+        )
         try:
             llm = NonStreamingChatOpenAI(**{**llm_kwargs, "client": explicit_client})
             logger.info("LLM criado com cliente OpenAI explícito")
