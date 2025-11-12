@@ -8,7 +8,7 @@ import os
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 import httpx
-from langchain.agents import AgentExecutor, create_openai_functions_agent
+from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.messages import AIMessageChunk, SystemMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import AgentType
@@ -265,8 +265,8 @@ def create_agent() -> AgentExecutor:
         MessagesPlaceholder(variable_name="agent_scratchpad"), # Essencial para o agente
     ])
     
-    # 3. Criar o agente (moderno)
-    agent = create_openai_functions_agent(llm, TOOLS, prompt)
+    # 3. Criar o agente (moderno) usando OpenAI Tools (compatível com modelos atuais)
+    agent = create_openai_tools_agent(llm, TOOLS, prompt)
     
     # 4. Criar o Executor (moderno)
     agent_executor = AgentExecutor(
