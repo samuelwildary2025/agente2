@@ -339,8 +339,7 @@ def run_agent(telefone: str, mensagem: str) -> Dict[str, Any]:
     """
     Executa o agente com uma mensagem e um ID de sessão (telefone).
     
-    Agora o agente (LLM) decide primeiro, e o pipeline
-    de EAN/estoque entra como fallback.
+    O LLM decide e invoca ferramentas; não há fallback de pipeline.
     
     Args:
         telefone: Telefone do cliente (usado como session_id)
@@ -364,7 +363,12 @@ def run_agent(telefone: str, mensagem: str) -> Dict[str, Any]:
         logger.debug(f"Resposta: {output}")
         return {"output": output, "error": None}
     except Exception as e:
-        logger.warning(f"LLM falhou, aplicando pipeline como fallback: {e}")
+        logger.error(f"Falha ao executar LLM: {e}")
+        error_msg = f"Erro ao executar o agente: {e}"
+        return {
+            "output": "Desculpe, não consegui processar sua mensagem agora.",
+            "error": error_msg,
+        }
 
     # 2) Pipeline proativo: Produto → EAN → Estoque/Preço
     try:
