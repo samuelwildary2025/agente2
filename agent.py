@@ -217,7 +217,6 @@ def create_agent() -> AgentExecutor:
         llm_kwargs["temperature"] = settings.llm_temperature
 
     llm = ChatOpenAI(**llm_kwargs)
-    
     logger.info(f"LLM configurado (padrão): {settings.llm_model}")
     
     # ==================================================================
