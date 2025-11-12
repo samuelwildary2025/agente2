@@ -10,7 +10,7 @@ services:
     env_file:
       - .env
     environment:
-      - POSTGRES_CONNECTION_STRING=postgresql://agente_user:senha_segura@postgres:5432/agente_db
+      - POSTGRES_CONNECTION_STRING=postgresql://samuelwildary:85885885@sistema_db-agente:5432/db-agente?sslmode=disable
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
