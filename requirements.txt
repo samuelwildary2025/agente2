@@ -1,7 +1,7 @@
 # Core Dependencies
 langchain==0.1.0
 langchain-community==0.0.13
-langchain-openai==0.0.8
+langchain-openai==0.0.5
 openai==1.10.0
 
 # Web Framework

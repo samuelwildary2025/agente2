@@ -267,14 +267,19 @@ def create_agent() -> AgentExecutor:
                 # Em caso de erro, propaga como chunk único com conteúdo vazio
                 yield AIMessageChunk(content=f"Erro: {str(e)}")
 
-    # Injetar cliente OpenAI explícito para evitar construção interna com 'proxies'
+    # Tentar usar cliente OpenAI explícito; se não suportado pela versão instalada, fazer fallback
+    llm = None
     try:
         explicit_client = OpenAI(api_key=settings.openai_api_key)
-        llm_kwargs["client"] = explicit_client
+        try:
+            llm = NonStreamingChatOpenAI(**{**llm_kwargs, "client": explicit_client})
+            logger.info("LLM criado com cliente OpenAI explícito")
+        except Exception as e:
+            logger.warning(f"Cliente explícito não suportado pelo ChatOpenAI atual: {e}. Fallback sem 'client'.")
+            llm = NonStreamingChatOpenAI(**llm_kwargs)
     except Exception as e:
-        logger.warning(f"Falha ao criar cliente OpenAI explícito: {e}. Prosseguindo sem 'client'.")
-
-    llm = NonStreamingChatOpenAI(**llm_kwargs)
+        logger.warning(f"Falha ao instanciar cliente OpenAI: {e}. Usando ChatOpenAI padrão.")
+        llm = NonStreamingChatOpenAI(**llm_kwargs)
     logger.info(f"LLM configurado: {settings.llm_model}")
     
     # Definir prompt do agente (carregado de arquivo com placeholders)
