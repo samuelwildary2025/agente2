@@ -18,6 +18,7 @@ requests==2.31.0
 # Database & Storage
 redis==5.0.1
 psycopg2-binary==2.9.9
+psycopg==3.1.19
 
 # AI & ML
 cohere==4.47

@@ -45,11 +45,18 @@ else
   echo "[SKIP] Check de versões pulado por não detectar container."
 fi
 
-echo "[7/7] Conferindo versão do httpx..."
+echo "[7/8] Conferindo versão do httpx..."
 if [[ -n "${AGENTE_CONTAINER}" ]]; then
   docker exec "${AGENTE_CONTAINER}" sh -lc 'pip show httpx | grep -i "Version" || echo "httpx não instalado via pip (pode ser dependência transitiva)"'
 else
   echo "[SKIP] Check de httpx pulado por não detectar container."
+fi
+
+echo "[8/8] Conferindo versão do psycopg (driver Postgres)..."
+if [[ -n "${AGENTE_CONTAINER}" ]]; then
+  docker exec "${AGENTE_CONTAINER}" sh -lc 'python -c "import psycopg; print(psycopg.__version__)" 2>/dev/null || echo "psycopg ausente (instale via requirements)"'
+else
+  echo "[SKIP] Check de psycopg pulado por não detectar container."
 fi
 
 echo "[DONE] Redeploy concluído."
