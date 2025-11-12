@@ -217,8 +217,6 @@ def create_agent() -> AgentExecutor:
         llm_kwargs["temperature"] = settings.llm_temperature
 
     # Remover import do cliente OpenAI
-    // ... existing code ...
-    # Remover qualquer instância de OpenAI
     llm_kwargs = {
         "model": settings.llm_model,
         "openai_api_key": settings.openai_api_key,
