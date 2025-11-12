@@ -1,23 +1,17 @@
 """
-agent atualizado
 Agente de IA para Atendimento de Supermercado
 Utiliza LangChain para orquestração de ferramentas e memória de conversação
+(v7 - Remove classe NonStreamingChatOpenAI e injeção de client)
 """
 from typing import Dict, Any
-import os  # Correção para 'proxies'
+import os
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 import httpx
-# ==================================================================
-# INÍCIO DAS NOVAS IMPORTAÇÕES
-# ==================================================================
 from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain_core.messages import AIMessageChunk, SystemMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-# ==================================================================
-# FIM DAS NOVAS IMPORTAÇÕES
-# ==================================================================
-from langchain.agents import AgentType # (Não mais usado, mas mantido por segurança)
+from langchain.agents import AgentType
 from langchain_core.tools import tool
 from langchain_community.chat_message_histories import PostgresChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -195,7 +189,7 @@ def create_agent() -> AgentExecutor:
     """
     Cria e retorna o AgentExecutor configurado (MODO MODERNO - LCEL)
     """
-    logger.info("Criando agente de IA (VERSÃO CORRIGIDA v6 - LCEL)...")
+    logger.info("Criando agente de IA (VERSÃO CORRIGIDA v7 - LCEL)...")
 
     # --- CORREÇÃO v4: (Manter) ---
     os.environ.pop("http_proxy", None)
@@ -204,48 +198,30 @@ def create_agent() -> AgentExecutor:
     os.environ.pop("HTTPS_PROXY", None)
     logger.info("Variáveis de ambiente de proxy (se existiam) foram removidas.")
     
-    # --- Configuração do LLM (sem alteração) ---
+    # ==================================================================
+    # INÍCIO DA CORREÇÃO (v7 - Simplificação do LLM)
+    # ==================================================================
+    
+    # Removemos a classe 'NonStreamingChatOpenAI' e a injeção do 'httpx.Client'
+    # Deixamos o ChatOpenAI padrão criar seu próprio cliente.
+    
     llm_kwargs = {
         "model": settings.llm_model,
         "openai_api_key": settings.openai_api_key,
+        "streaming": False, # Garantir que não use streaming
     }
-    llm_kwargs["streaming"] = False
+    
     if "gpt-5-mini" in str(settings.llm_model):
         llm_kwargs["temperature"] = 1.0
     else:
         llm_kwargs["temperature"] = settings.llm_temperature
-        
-    class NonStreamingChatOpenAI(ChatOpenAI):
-        def stream(self, input, config=None, **kwargs):
-            try:
-                msg = self.invoke(input, config=config, **kwargs)
-                yield AIMessageChunk(
-                    content=msg.content,
-                    additional_kwargs=getattr(msg, "additional_kwargs", {}),
-                    tool_calls=getattr(msg, "tool_calls", None),
-                )
-            except Exception as e:
-                yield AIMessageChunk(content=f"Erro: {str(e)}")
 
-    llm = None
-    try:
-        explicit_client = OpenAI(
-            api_key=settings.openai_api_key,
-            http_client=httpx.Client(trust_env=False, follow_redirects=True),
-        )
-        try:
-            llm = NonStreamingChatOpenAI(**{**llm_kwargs, "client": explicit_client})
-            logger.info("LLM criado com cliente OpenAI explícito")
-        except Exception as e:
-            logger.warning(f"Cliente explícito não suportado pelo ChatOpenAI atual: {e}. Fallback sem 'client'.")
-            llm = NonStreamingChatOpenAI(**llm_kwargs)
-    except Exception as e:
-        logger.warning(f"Falha ao instanciar cliente OpenAI: {e}. Usando ChatOpenAI padrão.")
-        llm = NonStreamingChatOpenAI(**llm_kwargs)
-    logger.info(f"LLM configurado: {settings.llm_model}")
+    llm = ChatOpenAI(**llm_kwargs)
+    
+    logger.info(f"LLM configurado (padrão): {settings.llm_model}")
     
     # ==================================================================
-    # INÍCIO DA CORREÇÃO (Refatoração para LCEL)
+    # FIM DA CORREÇÃO (v7)
     # ==================================================================
     
     # 1. Carregar o texto do prompt do sistema
@@ -255,10 +231,8 @@ def create_agent() -> AgentExecutor:
         .replace("{base_url}", settings.supermercado_base_url)
         .replace("{ean_base}", settings.estoque_ean_base_url)
     )
-    # NOTA: Não precisamos mais escapar { } duplos
     
     # 2. Criar o template do prompt (moderno)
-    # O 'RunnableWithMessageHistory' espera 'input' e 'chat_history'
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content=system_prompt_text),
         MessagesPlaceholder(variable_name="chat_history"),
@@ -267,7 +241,6 @@ def create_agent() -> AgentExecutor:
     ])
     
     # 3. Criar o agente (moderno)
-    # Usamos o construtor moderno em vez do initialize_agent depreciado
     agent = create_openai_functions_agent(llm, TOOLS, prompt)
     
     # 4. Criar o Executor (moderno)
@@ -279,10 +252,6 @@ def create_agent() -> AgentExecutor:
         max_execution_time=60,
         handle_parsing_errors=True, # Importante para robustez
     )
-    
-    # ==================================================================
-    # FIM DA CORREÇÃO
-    # ==================================================================
     
     logger.info("✅ Agente (LCEL) criado com sucesso")
     return agent_executor
