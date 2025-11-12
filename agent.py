@@ -108,21 +108,72 @@ def time_tool() -> str:
     return get_current_time()
 
 
+def _extract_product_core(text: str) -> str:
+    """Extrai apenas o nome principal do produto da mensagem.
+
+    Heurística simples em PT-BR: remove cumprimentos, verbos/fillers, números,
+    unidades/embalagens e atributos (ex.: integral/zero), mantendo 1–2 tokens
+    centrais do produto (ex.: "arroz", "coca cola").
+    """
+    import re
+
+    if not text:
+        return ""
+
+    s = text.lower()
+    # Tokens alfanuméricos com suporte a acentuação
+    tokens = re.findall(r"[\wáéíóúâêîôûãõç]+", s)
+
+    stopwords = {
+        "ana","oi","ola","olá","bom","boa","dia","tarde","noite",
+        "quero","queria","preciso","procuro","me","ver","tem","gostaria",
+        "por","favor","meu","minha","nome","sou","eu","é","eh","ser",
+        "o","a","os","as","um","uma","de","do","da","dos","das",
+        "pra","para","com","sem","e","ou","no","na","nos","nas",
+    }
+    units = {"ml","l","lt","litro","g","kg","un","unidade","pct","pacote","cx","caixa","lata","garrafa"}
+    attrs = {"integral","parboilizado","branco","preto","zero","light","diet","pet","ret","lata","longa","vida"}
+
+    cleaned: list[str] = []
+    for t in tokens:
+        # números puros ou com separadores
+        if re.fullmatch(r"\d+(?:[\.,]\d+)?", t):
+            continue
+        # número+unidade colado (ex.: 2l, 600ml, 1kg)
+        if any(t.endswith(u) for u in units) and re.match(r"^\d+", t):
+            continue
+        if t in stopwords:
+            continue
+        if t in units:
+            continue
+        if t in attrs:
+            continue
+        cleaned.append(t)
+
+    if not cleaned:
+        return text.strip()
+
+    # Mantém até 2 tokens centrais para suportar nomes compostos (ex.: coca cola)
+    core = " ".join(cleaned[:2]).strip()
+    return core
+
 @tool
 def ean_tool(query: str) -> str:
     """
     Buscar EAN/infos do produto via Supabase Functions (smart-responder).
-    Envie o texto mencionado pelo cliente (nome/descrição) como 'query'.
+    Extraia internamente o nome do produto e envie APENAS esse nome como 'query'.
     """
-    return ean_lookup(query)
+    product_query = _extract_product_core(query)
+    return ean_lookup(product_query)
 
 @tool("ean")
 def ean_tool_alias(query: str) -> str:
     """
     Alias de ferramenta: `ean`
-    Buscar EAN/infos do produto via smart-responder enviando o nome/descrição.
+    Extrai o nome principal do produto e envia apenas ele para o smart-responder.
     """
-    return ean_lookup(query)
+    product_query = _extract_product_core(query)
+    return ean_lookup(product_query)
 
 
 @tool
