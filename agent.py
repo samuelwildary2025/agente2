@@ -7,9 +7,16 @@ import os  # Correção para 'proxies'
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 import httpx
-from langchain_core.messages import AIMessageChunk, SystemMessage  # <-- CORREÇÃO: Importar SystemMessage
-from langchain.agents import AgentExecutor, initialize_agent, AgentType
+# ==================================================================
+# INÍCIO DAS NOVAS IMPORTAÇÕES
+# ==================================================================
+from langchain.agents import AgentExecutor, create_openai_functions_agent
+from langchain_core.messages import AIMessageChunk, SystemMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+# ==================================================================
+# FIM DAS NOVAS IMPORTAÇÕES
+# ==================================================================
+from langchain.agents import AgentType # (Não mais usado, mas mantido por segurança)
 from langchain_core.tools import tool
 from langchain_community.chat_message_histories import PostgresChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -169,15 +176,9 @@ TOOLS = [
 # Configuração do Agente
 # ============================================
 
-# --- CORREÇÃO v5: Início (Consolidar Prompt) ---
-# Removemos o prompt 'default_prompt' que estava codificado aqui
-# e removemos a lógica de 'settings.agent_prompt_path'.
-# O agente agora depende *apenas* do ficheiro 'prompts/agent_system.md'.
-
 def _load_agent_prompt() -> str:
     """Carrega o prompt do agente de um arquivo externo obrigatório."""
     
-    # Define o caminho único e obrigatório para o prompt
     base_dir = Path(__file__).resolve().parent
     prompt_path = str((base_dir / "prompts" / "agent_system.md"))
 
@@ -186,42 +187,34 @@ def _load_agent_prompt() -> str:
         logger.info(f"Carregado prompt único em: {prompt_path}")
         return text
     except Exception as e:
-        # Se o arquivo obrigatório falhar, o agente não pode iniciar.
         logger.error(f"FALHA CRÍTICA: Não foi possível carregar o prompt em {prompt_path}. Erro: {e}")
-        # Lança o erro para parar a inicialização do agente
         raise
-# --- CORREÇÃO v5: Fim ---
-
 
 def create_agent() -> AgentExecutor:
     """
-    Cria e retorna o AgentExecutor configurado
+    Cria e retorna o AgentExecutor configurado (MODO MODERNO - LCEL)
     """
-    logger.info("Criando agente de IA (VERSÃO CORRIGIDA v5)...")
+    logger.info("Criando agente de IA (VERSÃO CORRIGIDA v6 - LCEL)...")
 
-    # --- CORREÇÃO v4: Início (Corrigir 'proxies') ---
-    # Limpa variáveis de proxy do ambiente
+    # --- CORREÇÃO v4: (Manter) ---
     os.environ.pop("http_proxy", None)
-    os.environ.pop("https_proxy", None)
+    os.environ.pop("https://_proxy", None)
     os.environ.pop("HTTP_PROXY", None)
     os.environ.pop("HTTPS_PROXY", None)
     logger.info("Variáveis de ambiente de proxy (se existiam) foram removidas.")
-    # --- CORREÇÃO v4: Fim ---
     
-    # Inicializar LLM (ajuste para modelos que não aceitam temperature!=1)
+    # --- Configuração do LLM (sem alteração) ---
     llm_kwargs = {
         "model": settings.llm_model,
         "openai_api_key": settings.openai_api_key,
     }
-    # Evitar streaming em modelos que não suportam
     llm_kwargs["streaming"] = False
-    # Alguns modelos (ex.: gpt-5-mini) não aceitam temperature diferente do default
     if "gpt-5-mini" in str(settings.llm_model):
         llm_kwargs["temperature"] = 1.0
     else:
         llm_kwargs["temperature"] = settings.llm_temperature
+        
     class NonStreamingChatOpenAI(ChatOpenAI):
-        # Força o caminho sem streaming mesmo se o agente usar .stream()
         def stream(self, input, config=None, **kwargs):
             try:
                 msg = self.invoke(input, config=config, **kwargs)
@@ -231,15 +224,12 @@ def create_agent() -> AgentExecutor:
                     tool_calls=getattr(msg, "tool_calls", None),
                 )
             except Exception as e:
-                # Em caso de erro, propaga como chunk único com conteúdo vazio
                 yield AIMessageChunk(content=f"Erro: {str(e)}")
 
-    # Tentar usar cliente OpenAI explícito; se não suportado pela versão instalada, fazer fallback
     llm = None
     try:
         explicit_client = OpenAI(
             api_key=settings.openai_api_key,
-            # Evita leitura de variáveis de ambiente (HTTP(S)_PROXY) e remove dependência de 'proxies'
             http_client=httpx.Client(trust_env=False, follow_redirects=True),
         )
         try:
@@ -253,43 +243,47 @@ def create_agent() -> AgentExecutor:
         llm = NonStreamingChatOpenAI(**llm_kwargs)
     logger.info(f"LLM configurado: {settings.llm_model}")
     
-    # Definir prompt do agente (carregado de arquivo com placeholders)
+    # ==================================================================
+    # INÍCIO DA CORREÇÃO (Refatoração para LCEL)
+    # ==================================================================
+    
+    # 1. Carregar o texto do prompt do sistema
     system_prompt_raw = _load_agent_prompt()
-    # Evitar KeyError por chaves JSON/markdown com { } no arquivo de prompt
     system_prompt_text = (
         system_prompt_raw
         .replace("{base_url}", settings.supermercado_base_url)
         .replace("{ean_base}", settings.estoque_ean_base_url)
     )
-    # Escapar quaisquer chaves restantes para evitar que ChatPromptTemplate trate como variáveis
-    system_prompt_text = system_prompt_text.replace("{", "{{").replace("}", "}}")
+    # NOTA: Não precisamos mais escapar { } duplos
     
-    # Nos releases 0.1.x do LangChain, utilizamos initialize_agent com OPENAI_FUNCTIONS
-    # e passamos o texto do system como "system_message" via agent_kwargs.
+    # 2. Criar o template do prompt (moderno)
+    # O 'RunnableWithMessageHistory' espera 'input' e 'chat_history'
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content=system_prompt_text),
+        MessagesPlaceholder(variable_name="chat_history"),
+        HumanMessage(content="{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"), # Essencial para o agente
+    ])
     
-    # ==================================================================
-    # INÍCIO DA CORREÇÃO
-    # ==================================================================
-    # O erro "Got unsupported message type" ocorre porque passamos um 
-    # dicionário em vez de um objeto SystemMessage.
+    # 3. Criar o agente (moderno)
+    # Usamos o construtor moderno em vez do initialize_agent depreciado
+    agent = create_openai_functions_agent(llm, TOOLS, prompt)
     
-    agent_executor = initialize_agent(
+    # 4. Criar o Executor (moderno)
+    agent_executor = AgentExecutor(
+        agent=agent,
         tools=TOOLS,
-        llm=llm,
-        agent=AgentType.OPENAI_FUNCTIONS,
         verbose=settings.debug_mode,
         max_iterations=10,
         max_execution_time=60,
-        handle_parsing_errors=True,
-        agent_kwargs={
-            "system_message": SystemMessage(content=system_prompt_text)  # <-- CORRIGIDO
-        },
+        handle_parsing_errors=True, # Importante para robustez
     )
+    
     # ==================================================================
     # FIM DA CORREÇÃO
     # ==================================================================
     
-    logger.info("✅ Agente criado com sucesso")
+    logger.info("✅ Agente (LCEL) criado com sucesso")
     return agent_executor
 
 
@@ -327,6 +321,7 @@ def get_agent_with_history():
     if _agent_with_history is None:
         _agent_executor = create_agent()
         
+        # Esta parte já estava correta e pronta para LCEL
         _agent_with_history = RunnableWithMessageHistory(
             _agent_executor,
             get_session_history,
