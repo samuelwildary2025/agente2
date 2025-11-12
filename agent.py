@@ -3,8 +3,7 @@ Agente de IA para Atendimento de Supermercado
 Utiliza LangChain para orquestração de ferramentas e memória de conversação
 """
 from typing import Dict, Any
-import os
-import httpx # Importar httpx
+import os  # Correção para 'proxies'
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 from langchain_core.messages import AIMessageChunk
@@ -47,7 +46,7 @@ def pedidos_tool(json_body: str) -> str:
     Enviar o pedido finalizado para o painel dos funcionários (dashboard).
     
     O corpo da requisição deve ser um JSON (em formato string) com os detalhes do pedido.
-    Exemplo: '{"cliente": "João Silva", "telefone": "55119999v8888", "itens": [{"produto": "Arroz Integral 1kg", "quantidade": 2, "preco": 8.50}], "total": 17.00}'
+    Exemplo: '{"cliente": "João Silva", "telefone": "5511999998888", "itens": [{"produto": "Arroz Integral 1kg", "quantidade": 2, "preco": 8.50}], "total": 17.00}'
     
     Use esta ferramenta SOMENTE quando o cliente confirmar que deseja finalizar o pedido.
     """
@@ -169,83 +168,49 @@ TOOLS = [
 # Configuração do Agente
 # ============================================
 
+# --- CORREÇÃO v5: Início (Consolidar Prompt) ---
+# Removemos o prompt 'default_prompt' que estava codificado aqui
+# e removemos a lógica de 'settings.agent_prompt_path'.
+# O agente agora depende *apenas* do ficheiro 'prompts/agent_system.md'.
+
 def _load_agent_prompt() -> str:
-    """Carrega o prompt do agente de um arquivo externo, com fallback.
-
-    Se `settings.agent_prompt_path` estiver definido, tenta ler desse caminho.
-    Caso contrário, tenta `prompts/agent_system.md` relativo ao projeto.
-    Se houver falha, retorna o prompt embutido padrão.
-    """
-    # Prompt padrão embutido (fallback)
-    default_prompt = (
-        "Você é um atendente virtual de um supermercado brasileiro. Sua função é auxiliar os clientes com:\n\n"
-        "- Informações sobre produtos, estoque e preços\n"
-        "- Criação e gerenciamento de pedidos\n"
-        "- Dúvidas sobre políticas da empresa (devoluções, entregas, etc.)\n"
-        "- Informações gerais sobre horários e serviços\n\n"
-        "INSTRUÇÕES IMPORTANTES:\n\n"
-        "1. SEMPRE chame ean_tool primeiro quando a mensagem mencionar produto, EAN, código de barras, SKU ou quando a intenção for identificar/confirmar o produto. Após obter a resposta, informe claramente o EAN e o nome do produto se disponíveis. Não invente EAN.\n"
-        "   - Se já tiver o EAN, use estoque_preco_tool(ean) para consultar preço e disponibilidade.\n\n"
-        "2. Para consultar produtos:\n"
-        "   - Use estoque_tool com a URL completa: {base_url}/produtos/consulta?nome=<nome_do_produto>\n"
-        "   - Substitua <nome_do_produto> pelo nome do produto que o cliente mencionou\n\n"
-        "3. Para criar pedidos:\n"
-        "   - SEMPRE verifique primeiro se o cliente já tem um pedido ativo usando confirme_tool\n"
-        "   - Confirme TODOS os detalhes com o cliente antes de finalizar\n"
-        "   - Use pedidos_tool com JSON completo incluindo: cliente, telefone, itens (produto, quantidade, preco), total\n"
-        "   - APÓS criar o pedido com sucesso, use set_tool para marcar como ativo\n\n"
-        "4. Para alterar/cancelar pedidos:\n"
-        "   - Use alterar_tool com o telefone e JSON de atualização\n\n"
-        "5. Seja cordial, profissional e eficiente.\n"
-        "   - Após usar ean_tool, se a resposta não trouxer EAN, peça mais detalhes objetivos (marca, sabor, tamanho, peso) e tente novamente.\n\n"
-        "6. O telefone do cliente é essencial — ele é usado como identificador único para memória e pedidos.\n\n"
-        "Base URL da API: {base_url}\n"
-        "Base URL EAN (preço/estoque): {ean_base}\n"
-    )
-
-    # Resolver caminho do arquivo
-    prompt_path = settings.agent_prompt_path
-    if not prompt_path:
-        # Default: prompts/agent_system.md ao lado do projeto
-        base_dir = Path(__file__).resolve().parent
-        prompt_path = str((base_dir / "prompts" / "agent_system.md"))
+    """Carrega o prompt do agente de um arquivo externo obrigatório."""
+    
+    # Define o caminho único e obrigatório para o prompt
+    base_dir = Path(__file__).resolve().parent
+    prompt_path = str((base_dir / "prompts" / "agent_system.md"))
 
     try:
         text = Path(prompt_path).read_text(encoding="utf-8")
-        logger.info(f"Carregado prompt externo em: {prompt_path}")
+        logger.info(f"Carregado prompt único em: {prompt_path}")
         return text
     except Exception as e:
-        logger.warning(f"Falha ao carregar prompt externo ({prompt_path}); usando padrão embutido. Erro: {e}")
-        return default_prompt
+        # Se o arquivo obrigatório falhar, o agente não pode iniciar.
+        logger.error(f"FALHA CRÍTICA: Não foi possível carregar o prompt em {prompt_path}. Erro: {e}")
+        # Lança o erro para parar a inicialização do agente
+        raise
+# --- CORREÇÃO v5: Fim ---
 
 
 def create_agent() -> AgentExecutor:
     """
     Cria e retorna o AgentExecutor configurado
     """
-    
-    logger.info("=" * 50)
-    logger.info("INICIANDO create_agent() COM A CORREÇÃO v3 (HTTPX)")
-    logger.info("=" * 50)
+    logger.info("Criando agente de IA (VERSÃO CORRIGIDA v5)...")
 
-    # --- Início da Correção ---
+    # --- CORREÇÃO v4: Início (Corrigir 'proxies') ---
     # Limpa variáveis de proxy do ambiente
     os.environ.pop("http_proxy", None)
     os.environ.pop("https_proxy", None)
     os.environ.pop("HTTP_PROXY", None)
     os.environ.pop("HTTPS_PROXY", None)
     logger.info("Variáveis de ambiente de proxy (se existiam) foram removidas.")
-    
-    # Cria um cliente HTTP explícito sem proxies
-    http_client = httpx.Client(proxies={})
-    logger.info("Cliente HTTP httpx criado sem proxies.")
-    # --- Fim da Correção ---
+    # --- CORREÇÃO v4: Fim ---
     
     # Inicializar LLM (ajuste para modelos que não aceitam temperature!=1)
     llm_kwargs = {
         "model": settings.llm_model,
         "openai_api_key": settings.openai_api_key,
-        "http_client": http_client # Passa o http_client
     }
     # Evitar streaming em modelos que não suportam
     llm_kwargs["streaming"] = False
@@ -271,18 +236,16 @@ def create_agent() -> AgentExecutor:
     # Tentar usar cliente OpenAI explícito; se não suportado pela versão instalada, fazer fallback
     llm = None
     try:
-        # Passa o http_client também para o cliente OpenAI explícito
-        explicit_client = OpenAI(api_key=settings.openai_api_key, http_client=http_client)
+        explicit_client = OpenAI(api_key=settings.openai_api_key)
         try:
-            # `http_client` já está em llm_kwargs, mas 'client' é o cliente OpenAI
             llm = NonStreamingChatOpenAI(**{**llm_kwargs, "client": explicit_client})
-            logger.info("LLM criado com cliente OpenAI explícito (e http_client customizado)")
+            logger.info("LLM criado com cliente OpenAI explícito")
         except Exception as e:
             logger.warning(f"Cliente explícito não suportado pelo ChatOpenAI atual: {e}. Fallback sem 'client'.")
-            llm = NonStreamingChatOpenAI(**llm_kwargs) # Ainda terá o http_client
+            llm = NonStreamingChatOpenAI(**llm_kwargs)
     except Exception as e:
         logger.warning(f"Falha ao instanciar cliente OpenAI: {e}. Usando ChatOpenAI padrão.")
-        llm = NonStreamingChatOpenAI(**llm_kwargs) # Ainda terá o http_client
+        llm = NonStreamingChatOpenAI(**llm_kwargs)
     logger.info(f"LLM configurado: {settings.llm_model}")
     
     # Definir prompt do agente (carregado de arquivo com placeholders)
