@@ -3,8 +3,7 @@ Agente de IA para Atendimento de Supermercado
 Utiliza LangChain para orquestração de ferramentas e memória de conversação
 """
 from typing import Dict, Any
-import os
-import httpx # Importar httpx
+import os  # <-- CORREÇÃO
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 from langchain_core.messages import AIMessageChunk
@@ -47,7 +46,7 @@ def pedidos_tool(json_body: str) -> str:
     Enviar o pedido finalizado para o painel dos funcionários (dashboard).
     
     O corpo da requisição deve ser um JSON (em formato string) com os detalhes do pedido.
-    Exemplo: '{"cliente": "João Silva", "telefone": "55119999v8888", "itens": [{"produto": "Arroz Integral 1kg", "quantidade": 2, "preco": 8.50}], "total": 17.00}'
+    Exemplo: '{"cliente": "João Silva", "telefone": "5511999998888", "itens": [{"produto": "Arroz Integral 1kg", "quantidade": 2, "preco": 8.50}], "total": 17.00}'
     
     Use esta ferramenta SOMENTE quando o cliente confirmar que deseja finalizar o pedido.
     """
@@ -223,29 +222,21 @@ def create_agent() -> AgentExecutor:
     """
     Cria e retorna o AgentExecutor configurado
     """
-    
-    logger.info("=" * 50)
-    logger.info("INICIANDO create_agent() COM A CORREÇÃO v3 (HTTPX)")
-    logger.info("=" * 50)
+    logger.info("Criando agente de IA (VERSÃO CORRIGIDA v4)...")
 
-    # --- Início da Correção ---
+    # --- CORREÇÃO v4: Início ---
     # Limpa variáveis de proxy do ambiente
     os.environ.pop("http_proxy", None)
     os.environ.pop("https_proxy", None)
     os.environ.pop("HTTP_PROXY", None)
     os.environ.pop("HTTPS_PROXY", None)
     logger.info("Variáveis de ambiente de proxy (se existiam) foram removidas.")
-    
-    # Cria um cliente HTTP explícito sem proxies
-    http_client = httpx.Client(proxies={})
-    logger.info("Cliente HTTP httpx criado sem proxies.")
-    # --- Fim da Correção ---
+    # --- CORREÇÃO v4: Fim ---
     
     # Inicializar LLM (ajuste para modelos que não aceitam temperature!=1)
     llm_kwargs = {
         "model": settings.llm_model,
         "openai_api_key": settings.openai_api_key,
-        "http_client": http_client # Passa o http_client
     }
     # Evitar streaming em modelos que não suportam
     llm_kwargs["streaming"] = False
@@ -271,18 +262,16 @@ def create_agent() -> AgentExecutor:
     # Tentar usar cliente OpenAI explícito; se não suportado pela versão instalada, fazer fallback
     llm = None
     try:
-        # Passa o http_client também para o cliente OpenAI explícito
-        explicit_client = OpenAI(api_key=settings.openai_api_key, http_client=http_client)
+        explicit_client = OpenAI(api_key=settings.openai_api_key)
         try:
-            # `http_client` já está em llm_kwargs, mas 'client' é o cliente OpenAI
             llm = NonStreamingChatOpenAI(**{**llm_kwargs, "client": explicit_client})
-            logger.info("LLM criado com cliente OpenAI explícito (e http_client customizado)")
+            logger.info("LLM criado com cliente OpenAI explícito")
         except Exception as e:
             logger.warning(f"Cliente explícito não suportado pelo ChatOpenAI atual: {e}. Fallback sem 'client'.")
-            llm = NonStreamingChatOpenAI(**llm_kwargs) # Ainda terá o http_client
+            llm = NonStreamingChatOpenAI(**llm_kwargs)
     except Exception as e:
         logger.warning(f"Falha ao instanciar cliente OpenAI: {e}. Usando ChatOpenAI padrão.")
-        llm = NonStreamingChatOpenAI(**llm_kwargs) # Ainda terá o http_client
+        llm = NonStreamingChatOpenAI(**llm_kwargs)
     logger.info(f"LLM configurado: {settings.llm_model}")
     
     # Definir prompt do agente (carregado de arquivo com placeholders)
