@@ -339,6 +339,9 @@ def run_agent(telefone: str, mensagem: str) -> Dict[str, Any]:
     """
     Executa o agente com uma mensagem e um ID de sessão (telefone).
     
+    Agora o agente (LLM) decide primeiro, e o pipeline
+    de EAN/estoque entra como fallback.
+    
     Args:
         telefone: Telefone do cliente (usado como session_id)
         mensagem: Mensagem do cliente
@@ -349,9 +352,22 @@ def run_agent(telefone: str, mensagem: str) -> Dict[str, Any]:
     logger.info(f"Executando agente para telefone: {telefone}")
     logger.debug(f"Mensagem recebida: {mensagem}")
 
+    # 1) Tentar primeiro o LLM com ferramentas e memória
     try:
-        # Pipeline proativo: Produto → EAN → Estoque/Preço, com resposta natural
-        # Se conseguirmos resolver pelo pipeline, retornamos sem envolver o LLM.
+        agent = get_agent_with_history()
+        response = agent.invoke(
+            {"input": mensagem},
+            config={"configurable": {"session_id": telefone}},
+        )
+        output = response.get("output", "Desculpe, não consegui processar sua mensagem.")
+        logger.info("✅ Agente executado com sucesso (LLM primeiro)")
+        logger.debug(f"Resposta: {output}")
+        return {"output": output, "error": None}
+    except Exception as e:
+        logger.warning(f"LLM falhou, aplicando pipeline como fallback: {e}")
+
+    # 2) Pipeline proativo: Produto → EAN → Estoque/Preço
+    try:
         import re, json
 
         def _extrair_pares(texto: str) -> list[tuple[str, str]]:
@@ -498,31 +514,21 @@ def run_agent(telefone: str, mensagem: str) -> Dict[str, Any]:
         except Exception as _e:
             logger.warning(f"Falha no fallback de nome: {_e}")
 
-        # Se pipeline não resolveu:
-        # Caso específico: smart-responder não configurado → evitar erro e pedir clarificação
+        # Caso específico: smart-responder não configurado → pedir clarificação
         if isinstance(ean_resp, str) and "SMART_RESPONDER_URL" in ean_resp:
             pergunta = (
                 "Para confirmar direitinho: prefere Coca-Cola de 2L, 1L ou lata? "
                 "Assim eu já te trago o preço certinho do que estiver disponível."
             )
-            logger.info("✅ Retorno de clarificação por falta de smart-responder")
+            logger.info("✅ Retorno de clarificação por falta de smart-responder (pipeline)")
             return {"output": pergunta, "error": None}
-
-        # Delegar ao LLM (com ferramentas e memória)
-        agent = get_agent_with_history()
-        response = agent.invoke(
-            {"input": mensagem},
-            config={"configurable": {"session_id": telefone}},
-        )
-        output = response.get("output", "Desculpe, não consegui processar sua mensagem.")
-        logger.info("✅ Agente executado com sucesso (LLM)")
-        logger.debug(f"Resposta: {output}")
-        return {"output": output, "error": None}
     except Exception as e:
-        error_msg = f"Erro ao executar agente: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        
-        return {
-            "output": "Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente.",
-            "error": error_msg
-        }
+        logger.warning(f"Pipeline falhou: {e}")
+
+    # 3) Último recurso
+    error_msg = "Erro ao executar agente/pipeline"
+    logger.error(error_msg)
+    return {
+        "output": "Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente.",
+        "error": error_msg,
+    }
