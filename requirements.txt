@@ -1,4 +1,4 @@
-# Core Dependencies - VERSÕES ATUALIZADAS E COMPATÍVEIS
+# Core Dependencies - VERSÕES COMPATÍVEIS
 langchain==0.3.7
 langchain-community==0.3.7
 langchain-openai==0.2.5
@@ -8,11 +8,11 @@ openai==1.54.4
 # Fix compatibilidade: httpx 0.28 removeu 'proxies'; manter <0.28
 httpx<0.28,>=0.23.0
 
-# Web Framework
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
-pydantic-settings==2.1.0
+# Web Framework - ATUALIZADO
+fastapi==0.115.4
+uvicorn[standard]==0.32.0
+pydantic>=2.7.4,<3.0.0
+pydantic-settings>=2.6.0
 
 # HTTP & API
 requests==2.31.0
