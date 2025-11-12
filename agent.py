@@ -366,7 +366,8 @@ def run_agent(telefone: str, mensagem: str) -> Dict[str, Any]:
         logger.debug(f"Resposta: {output}")
         return {"output": output, "error": None}
     except Exception as e:
-        logger.error(f"Falha ao executar LLM: {e}")
+        # Log detalhado do erro
+        logger.error(f"Falha ao executar LLM: {e}", exc_info=True)
         error_msg = f"Erro ao executar o agente: {e}"
         return {
             "output": "Desculpe, não consegui processar sua mensagem agora.",
@@ -374,6 +375,7 @@ def run_agent(telefone: str, mensagem: str) -> Dict[str, Any]:
         }
 
     # 2) Pipeline proativo: Produto → EAN → Estoque/Preço
+    # (Este pipeline de fallback não será executado se o try acima falhar)
     try:
         import re, json
 
