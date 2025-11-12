@@ -3,7 +3,7 @@ Agente de IA para Atendimento de Supermercado
 Utiliza LangChain para orquestração de ferramentas e memória de conversação
 """
 from typing import Dict, Any
-import os
+import os  # <-- CORREÇÃO: Adicionado import
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 from langchain_core.messages import AIMessageChunk
@@ -223,6 +223,17 @@ def create_agent() -> AgentExecutor:
     Cria e retorna o AgentExecutor configurado
     """
     logger.info("Criando agente de IA...")
+
+    # --- CORREÇÃO: Início ---
+    # Limpa variáveis de proxy do ambiente para evitar conflito
+    # com o cliente OpenAI v1.x (que não aceita 'proxies').
+    # Isso é comum em ambientes Docker como Easypanel.
+    os.environ.pop("http_proxy", None)
+    os.environ.pop("https_proxy", None)
+    os.environ.pop("HTTP_PROXY", None)
+    os.environ.pop("HTTPS_PROXY", None)
+    logger.info("Variáveis de ambiente de proxy (se existiam) foram removidas.")
+    # --- CORREÇÃO: Fim ---
     
     # Inicializar LLM (ajuste para modelos que não aceitam temperature!=1)
     llm_kwargs = {
