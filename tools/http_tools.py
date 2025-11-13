@@ -467,29 +467,10 @@ def estoque_preco(ean: str) -> str:
             return False
 
         def _is_available(d: Dict[str, Any]) -> bool:
-            # Verifica booleanos explícitos primeiro (maior prioridade)
-            for k in BOOL_AVAIL_KEYS:
-                if k in d:
-                    v = d.get(k)
-                    if isinstance(v, bool):
-                        return v
-                    # valores textuais como "true"/"false"
-                    if isinstance(v, str) and v.strip().lower() in {"true", "sim", "yes"}:
-                        return True
-            
-            # Se tiver disponibilidade=true e ativo=true, considera disponível
-            # mesmo com quantidade=0 (pode ser que o estoque não seja rastreado em tempo real)
-            if d.get("disponibilidade") is True and d.get("ativo") is True:
-                return True
-                
-            # Verifica quantidade positiva
+            # APENAS produtos com estoque real positivo (> 0)
             if _has_positive_qty(d):
                 return True
-                
-            # Verifica status textual
-            if _status_available(d):
-                return True
-                
+            
             return False
 
         def _extract_qty(d: Dict[str, Any]) -> float | None:
