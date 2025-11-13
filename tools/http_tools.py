@@ -484,6 +484,15 @@ def estoque_preco(ean: str) -> str:
                 return True
             return False
 
+        def _extract_qty(d: Dict[str, Any]) -> float | None:
+            for k in STOCK_QTY_KEYS:
+                if k in d:
+                    try:
+                        return float(str(d.get(k)).replace(',', '.'))
+                    except Exception:
+                        pass
+            return None
+
         def _extract_price(d: Dict[str, Any]) -> float | None:
             for k in PRICE_KEYS:
                 if k in d:
@@ -499,7 +508,6 @@ def estoque_preco(ean: str) -> str:
             if not _is_available(it):
                 continue  # manter apenas itens com estoque/disponibilidade
 
-            # Copiar item e remover campos de quantidade de estoque
             clean = {k: v for k, v in it.items() if k not in STOCK_QTY_KEYS}
 
             # Normalizar disponibilidade
@@ -510,6 +518,10 @@ def estoque_preco(ean: str) -> str:
             price = _extract_price(it)
             if price is not None:
                 clean["preco"] = price
+
+            qty = _extract_qty(it)
+            if qty is not None:
+                clean["quantidade"] = qty
 
             sanitized.append(clean)
 
