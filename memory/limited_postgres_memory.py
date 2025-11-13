@@ -47,17 +47,8 @@ class LimitedPostgresChatMessageHistory(BaseChatMessageHistory):
     
     @property
     def messages(self) -> List[BaseMessage]:
-        """Get only the most recent messages for the agent context."""
-        all_messages = self._postgres_history.messages
-        
-        # Return only the most recent messages for agent context
-        if len(all_messages) > self.max_messages:
-            recent_messages = all_messages[-self.max_messages:]
-            print(f"📊 Memória limitada: {len(all_messages)} mensagens no BD, "
-                  f"enviando {len(recent_messages)} mais recentes ao agente")
-            return recent_messages
-        
-        return all_messages
+        """Get optimized messages for the agent context."""
+        return self.get_optimized_context()
     
     def add_message(self, message: BaseMessage) -> None:
         """Add a message to the database (all messages are stored)."""
@@ -124,3 +115,48 @@ class LimitedPostgresChatMessageHistory(BaseChatMessageHistory):
             "max_messages": self.max_messages,
             "table_name": self.table_name
         }
+    
+    def should_clear_context(self, recent_messages: List[BaseMessage]) -> bool:
+        """
+        Determine if context should be cleared based on recent messages.
+        Returns True if agent is struggling to identify products.
+        """
+        if len(recent_messages) < 3:
+            return False
+            
+        # Check if last few messages show agent confusion
+        confusion_patterns = [
+            "não identifiquei",
+            "não consegui identificar",
+            "informar o nome principal",
+            "desculpe, não",
+            "pode informar"
+        ]
+        
+        recent_text = " ".join([msg.content.lower() for msg in recent_messages[-3:]])
+        
+        confusion_count = sum(1 for pattern in confusion_patterns if pattern in recent_text)
+        
+        # If 2+ confusion patterns in last 3 messages, suggest clearing
+        return confusion_count >= 2
+    
+    def get_optimized_context(self) -> List[BaseMessage]:
+        """
+        Get optimized context for product identification.
+        Focuses on recent product-related messages.
+        """
+        all_messages = self._postgres_history.messages
+        
+        if len(all_messages) <= self.max_messages:
+            return all_messages
+        
+        # Get recent messages
+        recent_messages = all_messages[-self.max_messages:]
+        
+        # Check if we should clear context due to confusion
+        if self.should_clear_context(recent_messages):
+            print(f"🔄 Detectada confusão do agente. Recomendação: limpar contexto para {self.session_id}")
+            # Return only the very last messages to reset context
+            return recent_messages[-3:]  # Only last 3 messages
+        
+        return recent_messages

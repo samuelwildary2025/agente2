@@ -8,10 +8,20 @@ import os
 from langchain_openai import ChatOpenAI
 from openai import OpenAI
 import httpx
-from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain.agents import create_agent
+try:
+    from langchain.agents import AgentExecutor
+except ImportError:
+    # LangChain v1.0+ usa create_agent diretamente
+    AgentExecutor = None
+try:
+    from langchain.agents import create_openai_tools_agent
+except ImportError:
+    # Nova versão não tem mais create_openai_tools_agent
+    create_openai_tools_agent = None
 from langchain_core.messages import AIMessageChunk, SystemMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.agents import AgentType
+# from langchain.agents import AgentType  # Removido - não existe mais na v1.0
 from langchain_core.tools import tool
 from langchain_community.chat_message_histories import PostgresChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -220,7 +230,7 @@ def _load_agent_prompt() -> str:
         logger.error(f"FALHA CRÍTICA: Não foi possível carregar o prompt em {prompt_path}. Erro: {e}")
         raise
 
-def create_agent() -> AgentExecutor:
+def create_agent():
     """
     Cria e retorna o AgentExecutor configurado (MODO MODERNO - LCEL)
     """
@@ -282,17 +292,30 @@ def create_agent() -> AgentExecutor:
     ])
     
     # 3. Criar o agente (moderno) usando OpenAI Tools (compatível com modelos atuais)
-    agent = create_openai_tools_agent(llm, ACTIVE_TOOLS, prompt)
-    
-    # 4. Criar o Executor (moderno)
-    agent_executor = AgentExecutor(
-        agent=agent,
-        tools=ACTIVE_TOOLS,
-        verbose=settings.debug_mode,
-        max_iterations=10,
-        max_execution_time=60,
-        handle_parsing_errors=True, # Importante para robustez
-    )
+    # LangChain v1.0+ usa create_agent diretamente
+    if AgentExecutor is None:
+        # Nova API do LangChain v1.0+
+        agent_executor = create_agent(
+            llm,  # Primeiro parâmetro posicional
+            tools=ACTIVE_TOOLS,
+            system_prompt=system_prompt_text,
+            debug=settings.debug_mode
+        )
+    else:
+        # API antiga (mantida para compatibilidade)
+        if create_openai_tools_agent:
+            agent = create_openai_tools_agent(llm, ACTIVE_TOOLS, prompt)
+        else:
+            # Nova API também funciona com create_agent
+            agent = create_agent(llm, tools=ACTIVE_TOOLS, system_prompt=system_prompt_text)
+        agent_executor = AgentExecutor(
+            agent=agent,
+            tools=ACTIVE_TOOLS,
+            verbose=settings.debug_mode,
+            max_iterations=10,
+            max_execution_time=60,
+            handle_parsing_errors=True,
+        )
     
     logger.info("✅ Agente (LCEL) criado com sucesso")
     return agent_executor
