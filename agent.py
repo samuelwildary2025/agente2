@@ -114,6 +114,7 @@ def ean_tool(query: str) -> str:
     Buscar EAN/infos do produto via Supabase Functions (smart-responder).
     Envie o argumento conforme decidido pelo LLM e pelo prompt.
     """
+    logger.info(f"Ferramenta ean chamada com query: {str(query)[:100]}")
     return ean_lookup(query)
 
 @tool("ean")
@@ -122,6 +123,7 @@ def ean_tool_alias(query: str) -> str:
     Alias de ferramenta: `ean`
     Envie o argumento conforme decidido pelo LLM e pelo prompt.
     """
+    logger.info(f"Ferramenta ean(alias) chamada com query: {str(query)[:100]}")
     return ean_lookup(query)
 
 
@@ -166,7 +168,6 @@ TOOLS = [
 ]
 
 ACTIVE_TOOLS = [
-    ean_tool,
     ean_tool_alias,
 ]
 
