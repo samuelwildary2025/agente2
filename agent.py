@@ -22,8 +22,11 @@ from config.logger import setup_logger
 from tools.http_tools import estoque, pedidos, alterar, ean_lookup, estoque_preco
 from tools.redis_tools import set_pedido_ativo, confirme_pedido_ativo
 from tools.time_tool import get_current_time
+from typing import Any, Dict, Optional
 
 logger = setup_logger(__name__)
+
+_last_input_text: Optional[str] = None
 
 
 # ============================================
@@ -115,7 +118,10 @@ def ean_tool(query: str) -> str:
     Envie o argumento conforme decidido pelo LLM e pelo prompt.
     """
     logger.info(f"Ferramenta ean chamada com query: {str(query)[:100]}")
-    return ean_lookup(query)
+    q = (query or "").strip()
+    if q.startswith("{") and q.endswith("}"):
+        q = (_last_input_text or q)
+    return ean_lookup(q)
 
 @tool("ean")
 def ean_tool_alias(query: str) -> str:
@@ -124,7 +130,10 @@ def ean_tool_alias(query: str) -> str:
     Envie o argumento conforme decidido pelo LLM e pelo prompt.
     """
     logger.info(f"Ferramenta ean(alias) chamada com query: {str(query)[:100]}")
-    return ean_lookup(query)
+    q = (query or "").strip()
+    if q.startswith("{") and q.endswith("}"):
+        q = (_last_input_text or q)
+    return ean_lookup(q)
 
 
 @tool
@@ -353,6 +362,8 @@ def run_agent(telefone: str, mensagem: str) -> Dict[str, Any]:
     """
     logger.info(f"Executando agente para telefone: {telefone}")
     logger.debug(f"Mensagem recebida: {mensagem}")
+    global _last_input_text
+    _last_input_text = mensagem
 
     # 1) Tentar primeiro o LLM com ferramentas e memória
     try:
