@@ -21,6 +21,7 @@ requests==2.31.0
 # Database & Storage
 redis==5.0.1
 psycopg==3.2.12
+psycopg2-binary==2.9.10  # Para compatibilidade com código existente
 
 # AI & ML
 cohere==4.47

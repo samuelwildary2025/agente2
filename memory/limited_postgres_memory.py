@@ -2,8 +2,13 @@ from typing import List, Optional
 from langchain_community.chat_message_histories import PostgresChatMessageHistory
 from langchain_core.messages import BaseMessage
 from langchain_core.chat_history import BaseChatMessageHistory
-import psycopg2
-import psycopg2.extras
+try:
+    import psycopg2
+    import psycopg2.extras
+except ImportError:
+    # Fallback para psycopg 3.x
+    import psycopg as psycopg2
+    from psycopg import sql
 from config.settings import settings
 
 
