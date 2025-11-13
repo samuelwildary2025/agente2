@@ -28,7 +28,8 @@ class Settings(BaseSettings):
     
     # Postgres
     postgres_connection_string: str
-    postgres_table_name: str = "basemercadaokLkGG"
+    postgres_table_name: str = "memoria"  # Nome da tabela para histórico de mensagens (padrão: memoria)
+    postgres_message_limit: int = 20  # Número de mensagens recentes usadas pelo agente (0 = ilimitado)
     
     # Redis
     redis_host: str = "localhost"
