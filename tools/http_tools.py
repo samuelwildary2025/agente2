@@ -426,11 +426,11 @@ def estoque_preco(ean: str) -> str:
         STOCK_QTY_KEYS = {
             "estoque", "qtd", "qtde", "qtd_estoque", "quantidade", "quantidade_disponivel",
             "quantidadeDisponivel", "qtdDisponivel", "qtdEstoque", "estoqueAtual", "saldo",
-            "qty", "quantity", "stock", "amount"
+            "qty", "quantity", "stock", "amount", "qtd_produto", "qtd_movimentacao"
         }
 
         # Possíveis indicadores de disponibilidade
-        BOOL_AVAIL_KEYS = ("disponibilidade", "disponivel", "available", "in_stock", "em_estoque")
+        BOOL_AVAIL_KEYS = ("disponibilidade", "disponivel", "available", "in_stock", "em_estoque", "ativo")
         STATUS_KEYS = ("situacao", "situacaoEstoque", "status", "statusEstoque")
 
         def _parse_float(val) -> float | None:
