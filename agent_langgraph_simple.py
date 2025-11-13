@@ -294,5 +294,19 @@ def run_agent_langgraph(telefone: str, mensagem: str) -> Dict[str, Any]:
         }
 
 
+def get_session_history(session_id: str) -> LimitedPostgresChatMessageHistory:
+    """
+    Carrega o histórico de mensagens do Postgres com limite configurado.
+    O session_id é o telefone do cliente.
+    Mantém todas as mensagens no BD, mas envia apenas as recentes ao agente.
+    """
+    return LimitedPostgresChatMessageHistory(
+        connection_string=settings.postgres_connection_string,
+        session_id=session_id,
+        table_name=settings.postgres_table_name,
+        max_messages=settings.postgres_message_limit  # Limite configurável via ENV
+    )
+
+
 # Manter compatibilidade com o código existente
 run_agent = run_agent_langgraph
