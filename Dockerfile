@@ -33,8 +33,7 @@ COPY . .
 # Anotar tempo de build na imagem
 LABEL build_time=${BUILDTIME}
 
-# Criar diretório de logs
-RUN mkdir -p logs
+# Diretório de logs será criado em runtime pelo logger (config/logger.py)
 
 # Expor porta
 EXPOSE 8000
