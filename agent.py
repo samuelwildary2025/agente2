@@ -163,7 +163,11 @@ TOOLS = [
     ean_tool_alias,
     estoque_preco_tool,
     estoque_preco_alias,
-    
+]
+
+ACTIVE_TOOLS = [
+    ean_tool,
+    ean_tool_alias,
 ]
 
 
@@ -266,12 +270,12 @@ def create_agent() -> AgentExecutor:
     ])
     
     # 3. Criar o agente (moderno) usando OpenAI Tools (compatível com modelos atuais)
-    agent = create_openai_tools_agent(llm, TOOLS, prompt)
+    agent = create_openai_tools_agent(llm, ACTIVE_TOOLS, prompt)
     
     # 4. Criar o Executor (moderno)
     agent_executor = AgentExecutor(
         agent=agent,
-        tools=TOOLS,
+        tools=ACTIVE_TOOLS,
         verbose=settings.debug_mode,
         max_iterations=10,
         max_execution_time=60,
