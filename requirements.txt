@@ -1,6 +1,7 @@
 # Core Dependencies - Otimizadas para LangGraph
-# LangGraph usa langchain-core e langchain-openai, mas não precisa do pacote langchain completo
+# LangGraph usa langchain-core e langchain-openai, mas ainda precisamos de langchain-community para PostgreSQL
 langchain-core>=0.3.17,<0.4.0
+langchain-community>=0.3.7  # Necessário para PostgresChatMessageHistory
 langchain-openai==0.2.5
 langgraph>=0.2.0  # Agente moderno em grafo
 openai==1.54.4
