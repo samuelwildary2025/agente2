@@ -178,6 +178,7 @@ TOOLS = [
 
 ACTIVE_TOOLS = [
     ean_tool_alias,
+    estoque_preco_alias,
 ]
 
 
