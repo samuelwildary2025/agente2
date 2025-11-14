@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_provider: str = "openai"
     moonshot_api_key: Optional[str] = None
-    moonshot_api_url: str = "https://api.moonshot.ai"
+    moonshot_api_url: str = "https://api.moonshot.ai/anthropic"
     
     # Supabase
     # Removido: campos de Supabase (não utilizados)
