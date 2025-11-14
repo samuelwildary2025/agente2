@@ -229,10 +229,15 @@ def _build_llm():
             provider, model, temp = "moonshot", "kimi-k2-0711-preview", 0.6
     if provider == "moonshot":
         import os as _os
-        if getattr(settings, "moonshot_api_key", None):
-            _os.environ["ANTHROPIC_API_KEY"] = settings.moonshot_api_key
-        if getattr(settings, "moonshot_api_url", None):
-            _os.environ["ANTHROPIC_BASE_URL"] = settings.moonshot_api_url
+   k = getattr(settings, "moonshot_api_key", None)
+        u = getattr(settings, "moonshot_api_url", None)
+        if k:
+            _os.environ["ANTHROPIC_API_KEY"] = str(k).strip().strip("`")
+        if u:
+            _u = str(u).strip().strip("`")
+            if ("moonshot.ai" in _u or "moonshot.cn" in _u) and "/anthropic" not in _u:
+                _u = _u.rstrip("/") + "/anthropic"
+            _os.environ["ANTHROPIC_BASE_URL"] = _u
         from langchain_anthropic import ChatAnthropic
         return ChatAnthropic(model=model, temperature=temp)
     return ChatOpenAI(model=model, openai_api_key=settings.openai_api_key, temperature=temp)
