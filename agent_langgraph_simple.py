@@ -199,6 +199,19 @@ def load_system_prompt() -> str:
         logger.error(f"Falha ao carregar prompt: {e}")
         raise
 
+def _build_llm():
+    provider = getattr(settings, "llm_provider", "openai").lower()
+    if provider == "moonshot":
+        from langchain_anthropic import ChatAnthropic
+        try:
+            from anthropic import Anthropic
+            client = Anthropic(api_key=settings.moonshot_api_key, base_url=settings.moonshot_api_url)
+            return ChatAnthropic(model=settings.llm_model, temperature=settings.llm_temperature, client=client)
+        except Exception:
+            return ChatAnthropic(model=settings.llm_model, temperature=settings.llm_temperature, api_key=settings.moonshot_api_key)
+    return ChatOpenAI(model=settings.llm_model, openai_api_key=settings.openai_api_key, temperature=settings.llm_temperature)
+
+
 
 def create_agent_with_history():
     """Cria o agente LangGraph com histórico usando create_react_agent"""
@@ -207,12 +220,7 @@ def create_agent_with_history():
     # Carregar prompt do sistema
     system_prompt = load_system_prompt()
     
-    # Criar LLM
-    llm = ChatOpenAI(
-        model=settings.llm_model,
-        openai_api_key=settings.openai_api_key,
-        temperature=settings.llm_temperature,
-    )
+
     
     # Criar memória com checkpoint
     memory = MemorySaver()
