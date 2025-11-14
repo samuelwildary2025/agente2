@@ -211,6 +211,39 @@ def load_system_prompt() -> str:
         raise
 
 
+
+
+def _build_llm():
+    provider = getattr(settings, "llm_provider", "openai").lower()
+    model = getattr(settings, "llm_model", "gpt-4o-mini")
+    temp = float(getattr(settings, "llm_temperature", 0.0))
+    profile = getattr(settings, "llm_profile", None)
+    if profile:
+        p = str(profile).lower().strip()
+        if p == "quality_openai":
+            provider, model, temp = "openai", "gpt-4o", 0.2
+        elif p == "fast_openai":
+            provider, model, temp = "openai", "gpt-4o-mini", 0.2
+        elif p == "economy_openai":
+            provider, model, temp = "openai", "gpt-4o-mini", 0.6
+        elif p == "quality_kimi":
+            provider, model, temp = "moonshot", "kimi-k2-thinking-turbo", 1.0
+        elif p == "fast_kimi":
+            provider, model, temp = "moonshot", "kimi-k2-turbo-preview", 0.6
+        elif p == "economy_kimi":
+            provider, model, temp = "moonshot", "kimi-k2-0711-preview", 0.6
+    if provider == "moonshot":
+        from langchain_anthropic import ChatAnthropic
+        try:
+            from anthropic import Anthropic
+            client = Anthropic(api_key=settings.moonshot_api_key, base_url=settings.moonshot_api_url)
+            return ChatAnthropic(model=model, temperature=temp, client=client)
+        except Exception:
+            return ChatAnthropic(model=model, temperature=temp, api_key=settings.moonshot_api_key)
+    return ChatOpenAI(model=model, openai_api_key=settings.openai_api_key, temperature=temp)
+
+
+
 def create_agent_with_history():
     """Cria o agente LangGraph com histórico"""
     logger.info("Criando agente LangGraph...")
@@ -218,12 +251,7 @@ def create_agent_with_history():
     # Carregar prompt do sistema
     system_prompt = load_system_prompt()
     
-    # Criar LLM
-    llm = ChatOpenAI(
-        model=settings.llm_model,
-        openai_api_key=settings.openai_api_key,
-        temperature=settings.llm_temperature,
-    )
+
     
     # Criar grafo
     workflow = StateGraph(AgentState)
