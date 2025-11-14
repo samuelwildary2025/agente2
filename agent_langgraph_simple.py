@@ -229,7 +229,7 @@ def _build_llm():
             provider, model, temp = "moonshot", "kimi-k2-0711-preview", 0.6
     if provider == "moonshot":
         import os as _os
-   k = getattr(settings, "moonshot_api_key", None)
+        k = getattr(settings, "moonshot_api_key", None)
         u = getattr(settings, "moonshot_api_url", None)
         if k:
             _os.environ["ANTHROPIC_API_KEY"] = str(k).strip().strip("`")
