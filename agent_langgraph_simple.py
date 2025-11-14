@@ -239,7 +239,7 @@ def _build_llm():
                 _u = _u.rstrip("/") + "/anthropic"
             _os.environ["ANTHROPIC_BASE_URL"] = _u
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model, temperature=temp)
+        return ChatAnthropic(model=model, temperature=temp, max_tokens=1024)
     return ChatOpenAI(model=model, openai_api_key=settings.openai_api_key, temperature=temp)
 
 def create_agent_with_history():
