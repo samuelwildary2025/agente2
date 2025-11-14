@@ -184,34 +184,58 @@ ACTIVE_TOOLS = [
 # ============================================
 
 def load_system_prompt() -> str:
-    """Carrega o prompt do sistema"""
+    """Carrega o prompt do sistema humanizado para o Supermercado Queiroz"""
     base_dir = Path(__file__).resolve().parent
-    prompt_path = str((base_dir / "prompts" / "agent_system.md"))
+    prompt_path = str((base_dir / "prompts" / "agent_queiroz_humanizado.md"))
     
     try:
         text = Path(prompt_path).read_text(encoding="utf-8")
-        # Substituir variáveis
-        text = text.replace("{base_url}", settings.supermercado_base_url)
-        text = text.replace("{ean_base}", settings.estoque_ean_base_url)
-        logger.info(f"Carregado prompt do sistema de: {prompt_path}")
+        logger.info(f"Carregado prompt humanizado do sistema de: {prompt_path}")
         return text
     except Exception as e:
-        logger.error(f"Falha ao carregar prompt: {e}")
-        raise
+        logger.error(f"Falha ao carregar prompt humanizado: {e}")
+        # Fallback para o prompt antigo se o novo não existir
+        logger.info("Tentando carregar prompt padrão como fallback...")
+        fallback_path = str((base_dir / "prompts" / "agent_system.md"))
+        try:
+            text = Path(fallback_path).read_text(encoding="utf-8")
+            text = text.replace("{base_url}", settings.supermercado_base_url)
+            text = text.replace("{ean_base}", settings.estoque_ean_base_url)
+            logger.info(f"Carregado prompt de fallback de: {fallback_path}")
+            return text
+        except Exception as fallback_error:
+            logger.error(f"Falha ao carregar prompt de fallback também: {fallback_error}")
+            raise
+
 
 def _build_llm():
     provider = getattr(settings, "llm_provider", "openai").lower()
+    model = getattr(settings, "llm_model", "gpt-4o-mini")
+    temp = float(getattr(settings, "llm_temperature", 0.0))
+    profile = getattr(settings, "llm_profile", None)
+    if profile:
+        p = str(profile).lower().strip()
+        if p == "quality_openai":
+            provider, model, temp = "openai", "gpt-4o", 0.2
+        elif p == "fast_openai":
+            provider, model, temp = "openai", "gpt-4o-mini", 0.2
+        elif p == "economy_openai":
+            provider, model, temp = "openai", "gpt-4o-mini", 0.6
+        elif p == "quality_kimi":
+            provider, model, temp = "moonshot", "kimi-k2-thinking-turbo", 1.0
+        elif p == "fast_kimi":
+            provider, model, temp = "moonshot", "kimi-k2-turbo-preview", 0.6
+        elif p == "economy_kimi":
+            provider, model, temp = "moonshot", "kimi-k2-0711-preview", 0.6
     if provider == "moonshot":
         from langchain_anthropic import ChatAnthropic
         try:
             from anthropic import Anthropic
             client = Anthropic(api_key=settings.moonshot_api_key, base_url=settings.moonshot_api_url)
-            return ChatAnthropic(model=settings.llm_model, temperature=settings.llm_temperature, client=client)
+            return ChatAnthropic(model=model, temperature=temp, client=client)
         except Exception:
-            return ChatAnthropic(model=settings.llm_model, temperature=settings.llm_temperature, api_key=settings.moonshot_api_key)
-    return ChatOpenAI(model=settings.llm_model, openai_api_key=settings.openai_api_key, temperature=settings.llm_temperature)
-
-
+            return ChatAnthropic(model=model, temperature=temp, api_key=settings.moonshot_api_key)
+    return ChatOpenAI(model=model, openai_api_key=settings.openai_api_key, temperature=temp)
 
 def create_agent_with_history():
     """Cria o agente LangGraph com histórico usando create_react_agent"""
@@ -220,7 +244,7 @@ def create_agent_with_history():
     # Carregar prompt do sistema
     system_prompt = load_system_prompt()
     
-
+    llm = _build_llm()
     
     # Criar memória com checkpoint
     memory = MemorySaver()
