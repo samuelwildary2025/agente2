@@ -228,13 +228,13 @@ def _build_llm():
         elif p == "economy_kimi":
             provider, model, temp = "moonshot", "kimi-k2-0711-preview", 0.6
     if provider == "moonshot":
+        import os as _os
+        if getattr(settings, "moonshot_api_key", None):
+            _os.environ["ANTHROPIC_API_KEY"] = settings.moonshot_api_key
+        if getattr(settings, "moonshot_api_url", None):
+            _os.environ["ANTHROPIC_BASE_URL"] = settings.moonshot_api_url
         from langchain_anthropic import ChatAnthropic
-        try:
-            from anthropic import Anthropic
-            client = Anthropic(api_key=settings.moonshot_api_key, base_url=settings.moonshot_api_url)
-            return ChatAnthropic(model=model, temperature=temp, client=client)
-        except Exception:
-            return ChatAnthropic(model=model, temperature=temp, api_key=settings.moonshot_api_key)
+        return ChatAnthropic(model=model, temperature=temp)
     return ChatOpenAI(model=model, openai_api_key=settings.openai_api_key, temperature=temp)
 
 def create_agent_with_history():
