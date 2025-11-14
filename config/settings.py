@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     openai_api_key: str
     llm_model: str = "gpt-5-mini"
     llm_temperature: float = 0.0
+    llm_provider: str = "openai"
+    moonshot_api_key: Optional[str] = None
+    moonshot_api_url: str = "https://api.moonshot.ai"
     
     # Supabase
     # Removido: campos de Supabase (não utilizados)
