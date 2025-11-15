@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # OpenAI
     openai_api_key: str
     llm_model: str = "gpt-5-mini"
-    llm_temperature: float = 0.0
+    llm_temperature: float = 1.0
     llm_provider: str = "openai"
     moonshot_api_key: Optional[str] = None
     moonshot_api_url: str = "https://api.moonshot.ai/anthropic"
@@ -75,6 +75,10 @@ class Settings(BaseSettings):
 
     # Prompt do agente (caminho opcional para arquivo externo)
     agent_prompt_path: str | None = None
+    
+    # Modo econômico (respostas mais curtas para economizar tokens)
+    economy_mode: bool = False
+    max_response_tokens: int = 800
     
     # Config V1 legacy removida; usando model_config (Pydantic v2)
 
