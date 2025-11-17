@@ -175,14 +175,14 @@ def is_agent_in_cooldown(telefone: str) -> Tuple[bool, int]:
         return (False, -1)
 
 
-def set_pedido_ativo(telefone: str, valor: str = "ativo", ttl: int = 600) -> str:
+def set_pedido_ativo(telefone: str, valor: str = "ativo", ttl: int = 3600) -> str:
     """
     Define uma chave no Redis para indicar que um pedido está ativo.
     
     Args:
         telefone: Telefone do cliente
         valor: Valor a ser armazenado (padrão: "ativo")
-        ttl: Tempo de vida da chave em segundos (padrão: 600 = 10 minutos)
+        ttl: Tempo de vida da chave em segundos (padrão: 3600 = 1 hora)
     
     Returns:
         Mensagem de sucesso ou erro
@@ -199,7 +199,7 @@ def set_pedido_ativo(telefone: str, valor: str = "ativo", ttl: int = 600) -> str
     
     try:
         client.set(key, valor, ex=ttl)
-        success_msg = f"✅ Pedido marcado como ativo para o telefone {telefone}. Expira em {ttl} segundos."
+        success_msg = f"✅ Pedido marcado como ativo para o telefone {telefone}. Expira em {ttl//60} minutos ({ttl} segundos)."
         logger.info(f"Chave '{key}' definida com valor '{valor}' e TTL de {ttl}s")
         return success_msg
     
@@ -212,6 +212,64 @@ def set_pedido_ativo(telefone: str, valor: str = "ativo", ttl: int = 600) -> str
         error_msg = f"❌ Erro inesperado ao definir chave no Redis: {str(e)}"
         logger.error(error_msg)
         return error_msg
+
+
+def renovar_pedido_timeout(telefone: str, ttl: int = 3600) -> bool:
+    """
+    Renova o timeout do pedido quando há interação do cliente.
+    
+    Args:
+        telefone: Telefone do cliente
+        ttl: Novo TTL em segundos (padrão: 3600 = 1 hora)
+    
+    Returns:
+        True se renovado com sucesso, False caso contrário
+    """
+    client = get_redis_client()
+    
+    if client is None:
+        logger.warning("Redis indisponível - não foi possível renovar timeout")
+        return False
+    
+    key = f"{telefone}pedido"
+    
+    try:
+        # Verifica se o pedido existe antes de renovar
+        if client.exists(key):
+            client.expire(key, ttl)
+            logger.info(f"Timeout renovado para {telefone} por mais {ttl//60} minutos")
+            return True
+        return False
+        
+    except redis.exceptions.RedisError as e:
+        logger.error(f"Erro ao renovar timeout: {e}")
+        return False
+
+
+def verificar_pedido_expirado(telefone: str) -> bool:
+    """
+    Verifica se um pedido expirou (não existe mais no Redis).
+    
+    Args:
+        telefone: Telefone do cliente
+    
+    Returns:
+        True se o pedido expirou ou não existe, False se ainda está ativo
+    """
+    client = get_redis_client()
+    
+    if client is None:
+        logger.warning("Redis indisponível - considerando pedido como expirado")
+        return True
+    
+    key = f"{telefone}pedido"
+    
+    try:
+        valor = client.get(key)
+        return valor is None
+    except redis.exceptions.RedisError as e:
+        logger.error(f"Erro ao verificar pedido: {e}")
+        return True  # Considera expirado em caso de erro
 
 
 def confirme_pedido_ativo(telefone: str) -> str:
