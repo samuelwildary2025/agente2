@@ -304,6 +304,15 @@ def run_agent_langgraph(telefone: str, mensagem: str) -> Dict[str, Any]:
     logger.info(f"Executando agente LangGraph REACT para telefone: {telefone}")
     logger.debug(f"Mensagem recebida: {mensagem}")
     
+    # Verificar se o pedido anterior expirou (timeout de 1 hora)
+    if verificar_pedido_expirado(telefone):
+        logger.info(f"Pedido expirado para {telefone} - cliente precisa reiniciar")
+        return {
+            "output": "⏰ Seu pedido anterior expirou após 1 hora de inatividade. Por favor, envie 'pedido' para iniciar um novo atendimento.",
+            "error": None,
+            "expired": True
+        }
+    
     try:
         agent = get_agent_graph()
         

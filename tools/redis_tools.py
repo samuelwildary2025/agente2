@@ -247,6 +247,7 @@ def renovar_pedido_timeout(telefone: str, ttl: int = 3600) -> bool:
         return False
 
 
+<<<<<<< HEAD
 @tool
 def verificar_continuar_pedido_tool(telefone: str) -> str:
     """
