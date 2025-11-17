@@ -19,7 +19,7 @@ import os
 from config.settings import settings
 from config.logger import setup_logger
 from tools.http_tools import estoque, pedidos, alterar, ean_lookup, estoque_preco
-from tools.redis_tools import set_pedido_ativo, confirme_pedido_ativo
+from tools.redis_tools import set_pedido_ativo, confirme_pedido_ativo, verificar_pedido_expirado, renovar_pedido_timeout
 from tools.time_tool import get_current_time
 from memory.limited_postgres_memory import LimitedPostgresChatMessageHistory
 
@@ -186,15 +186,21 @@ ACTIVE_TOOLS = [
 def load_system_prompt() -> str:
     """Carrega o prompt do sistema humanizado para o Supermercado Queiroz"""
     base_dir = Path(__file__).resolve().parent
-    prompt_path = str((base_dir / "prompts" / "agent_queiroz_humanizado.md"))
+    
+    # Se modo econômico estiver ativado, usar prompt otimizado
+    if getattr(settings, "economy_mode", False):
+        prompt_path = str((base_dir / "prompts" / "agent_system_optimized.md"))
+        logger.info("Modo econômico ativado - usando prompt otimizado")
+    else:
+        prompt_path = str((base_dir / "prompts" / "agent_queiroz_humanizado.md"))
     
     try:
         text = Path(prompt_path).read_text(encoding="utf-8")
-        logger.info(f"Carregado prompt humanizado do sistema de: {prompt_path}")
+        logger.info(f"Carregado prompt do sistema de: {prompt_path}")
         return text
     except Exception as e:
-        logger.error(f"Falha ao carregar prompt humanizado: {e}")
-        # Fallback para o prompt antigo se o novo não existir
+        logger.error(f"Falha ao carregar prompt específico: {e}")
+        # Fallback para o prompt padrão
         logger.info("Tentando carregar prompt padrão como fallback...")
         fallback_path = str((base_dir / "prompts" / "agent_system.md"))
         try:
@@ -212,6 +218,7 @@ def _build_llm():
     provider = getattr(settings, "llm_provider", "openai").lower()
     model = getattr(settings, "llm_model", "gpt-4o-mini")
     temp = float(getattr(settings, "llm_temperature", 0.0))
+    max_tokens = getattr(settings, "max_response_tokens", 800)
     profile = getattr(settings, "llm_profile", None)
     if profile:
         p = str(profile).lower().strip()
@@ -239,8 +246,8 @@ def _build_llm():
                 _u = _u.rstrip("/") + "/anthropic"
             _os.environ["ANTHROPIC_BASE_URL"] = _u
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model, temperature=temp, max_tokens=1024)
-    return ChatOpenAI(model=model, openai_api_key=settings.openai_api_key, temperature=temp)
+        return ChatAnthropic(model=model, temperature=temp, max_tokens=max_tokens)
+    return ChatOpenAI(model=model, openai_api_key=settings.openai_api_key, temperature=temp, max_tokens=max_tokens)
 
 def create_agent_with_history():
     """Cria o agente LangGraph com histórico usando create_react_agent"""
@@ -296,6 +303,15 @@ def run_agent_langgraph(telefone: str, mensagem: str) -> Dict[str, Any]:
     logger.info(f"Executando agente LangGraph REACT para telefone: {telefone}")
     logger.debug(f"Mensagem recebida: {mensagem}")
     
+    # Verificar se o pedido anterior expirou (timeout de 1 hora)
+    if verificar_pedido_expirado(telefone):
+        logger.info(f"Pedido expirado para {telefone} - cliente precisa reiniciar")
+        return {
+            "output": "⏰ Seu pedido anterior expirou após 1 hora de inatividade. Por favor, envie 'pedido' para iniciar um novo atendimento.",
+            "error": None,
+            "expired": True
+        }
+    
     try:
         agent = get_agent_graph()
         
@@ -319,6 +335,9 @@ def run_agent_langgraph(telefone: str, mensagem: str) -> Dict[str, Any]:
         
         logger.info("✅ Agente LangGraph REACT executado com sucesso")
         logger.debug(f"Resposta: {output}")
+        
+        # Renovar o timeout do pedido após interação bem-sucedida
+        renovar_pedido_timeout(telefone)
         
         return {"output": output, "error": None}
         
