@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     
     # Modo econômico (respostas mais curtas para economizar tokens)
     economy_mode: bool = False
-    max_response_tokens: int = 800
+    max_response_tokens: int = 450
     
     # Config V1 legacy removida; usando model_config (Pydantic v2)
 

@@ -19,7 +19,7 @@ import os
 from config.settings import settings
 from config.logger import setup_logger
 from tools.http_tools import estoque, pedidos, alterar, ean_lookup, estoque_preco
-from tools.redis_tools import set_pedido_ativo, confirme_pedido_ativo
+from tools.redis_tools import set_pedido_ativo, confirme_pedido_ativo, verificar_pedido_expirado, renovar_pedido_timeout, verificar_continuar_pedido_tool
 from tools.time_tool import get_current_time
 from memory.limited_postgres_memory import LimitedPostgresChatMessageHistory
 
@@ -173,6 +173,7 @@ TOOLS = [
 
 # Ferramentas ativas (as principais que o agente usará)
 ACTIVE_TOOLS = [
+    verificar_continuar_pedido_tool,
     ean_tool_alias,
     estoque_preco_alias,
     time_tool,
@@ -306,7 +307,8 @@ def run_agent_langgraph(telefone: str, mensagem: str) -> Dict[str, Any]:
     try:
         agent = get_agent_graph()
         
-        # Preparar estado inicial
+        # Preparar estado inicial com verificação de timeout integrada
+        # A ferramenta verificar_continuar_pedido_tool será chamada automaticamente
         initial_state = {
             "messages": [HumanMessage(content=mensagem)],
         }
@@ -314,7 +316,7 @@ def run_agent_langgraph(telefone: str, mensagem: str) -> Dict[str, Any]:
         # Configuração com session_id para checkpoint
         config = {"configurable": {"thread_id": telefone}}
         
-        # Executar grafo
+        # Executar grafo - o agente automaticamente usará a ferramenta de verificação
         result = agent.invoke(initial_state, config)
         
         # Extrair última mensagem (resposta do agente)
@@ -326,6 +328,9 @@ def run_agent_langgraph(telefone: str, mensagem: str) -> Dict[str, Any]:
         
         logger.info("✅ Agente LangGraph REACT executado com sucesso")
         logger.debug(f"Resposta: {output}")
+        
+        # Renovar o timeout do pedido após interação bem-sucedida
+        renovar_pedido_timeout(telefone)
         
         return {"output": output, "error": None}
         
