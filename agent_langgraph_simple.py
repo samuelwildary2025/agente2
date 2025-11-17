@@ -19,7 +19,11 @@ import os
 from config.settings import settings
 from config.logger import setup_logger
 from tools.http_tools import estoque, pedidos, alterar, ean_lookup, estoque_preco
+<<<<<<< HEAD
 from tools.redis_tools import set_pedido_ativo, confirme_pedido_ativo, verificar_pedido_expirado, renovar_pedido_timeout, verificar_continuar_pedido_tool
+=======
+from tools.redis_tools import set_pedido_ativo, confirme_pedido_ativo, verificar_pedido_expirado, renovar_pedido_timeout
+>>>>>>> 47c8333de2aa6401e8896b637a6ca092b142eb39
 from tools.time_tool import get_current_time
 from memory.limited_postgres_memory import LimitedPostgresChatMessageHistory
 

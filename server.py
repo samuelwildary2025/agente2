@@ -21,7 +21,6 @@ from tools.redis_tools import (
     set_agent_cooldown,
     is_agent_in_cooldown,
 )
-from tools.audio_tools import transcrever_audio_url, transcrever_audio_base64
 
 logger = setup_logger(__name__)
 
@@ -277,29 +276,7 @@ def _extract_incoming(payload: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 mensagem_texto = "[Imagem recebida]"
         elif message_type in ("audioMessage", "audio") and not mensagem_texto:
-            # Processar mensagem de áudio
-            audio_data = message_any.get("audio", {})
-            audio_url = audio_data.get("url") or audio_data.get("link")
-            audio_base64 = audio_data.get("base64")
-            
-            if audio_url:
-                # Transcrever áudio de URL
-                try:
-                    mensagem_texto = transcrever_audio_url(audio_url)
-                    logger.info(f"Áudio transcrito de URL: {mensagem_texto[:50]}...")
-                except Exception as e:
-                    logger.error(f"Erro ao transcrever áudio de URL: {e}")
-                    mensagem_texto = "[Mensagem de áudio - não foi possível transcrever]"
-            elif audio_base64:
-                # Transcrever áudio em base64
-                try:
-                    mensagem_texto = transcrever_audio_base64(audio_base64)
-                    logger.info(f"Áudio transcrito de base64: {mensagem_texto[:50]}...")
-                except Exception as e:
-                    logger.error(f"Erro ao transcrever áudio de base64: {e}")
-                    mensagem_texto = "[Mensagem de áudio - não foi possível transcrever]"
-            else:
-                mensagem_texto = "[Mensagem de áudio recebida - sem dados de áudio]"
+            mensagem_texto = "[Mensagem de áudio recebida - transcrição não implementada]"
 
     return {
         "telefone": telefone,
